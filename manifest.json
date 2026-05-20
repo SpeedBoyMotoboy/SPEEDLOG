@@ -1,0 +1,25 @@
+{
+  "name": "SpeedLog",
+  "short_name": "SpeedLog",
+  "description": "Controle de separação e expedição de pedidos Mercado Livre",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#002FA7",
+  "theme_color": "#002FA7",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "https://i.imgur.com/R6T1goC.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://i.imgur.com/R6T1goC.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
