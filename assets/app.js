@@ -1,4 +1,4 @@
-// SpeedLog v6 — Firebase config via Config page (não exposta no código)
+// SpeedLog v7 — Firebase + Galpão
 var DATA_KEY = 'sl_data';
 var FB_KEY   = 'sl_fb';
 
@@ -6,11 +6,12 @@ var SM = {
   recebido:  {label:'Recebido',   icon:'📥', next:'separacao',  nxt:'Iniciar Separação'},
   separacao: {label:'Separação', icon:'🔍', next:'expedicao',  nxt:'Marcar Expedição'},
   expedicao: {label:'Expedição', icon:'📦', next:'finalizado', nxt:'Despachar ✅'},
-  finalizado:{label:'Despachado', icon:'✅',        next:null,         nxt:null}
+  finalizado:{label:'Despachado', icon:'✅', next:null,         nxt:null}
 };
 var SO = ['recebido','separacao','expedicao','finalizado'];
+var GALPOES = {real:'Real', comdip:'Comdip', bressan:'Bressan', sama:'Sama', pellegrino:'Pellegrino', eletropar:'Eletropar Nal.'};
 
-var ST = {pedidos:[], fStatus:null, fSearch:''};
+var ST = {pedidos:[], fStatus:null, fGalpao:null, fSearch:''};
 var fbDb = null;
 var qrScanner = null;
 var PREFILL = null;
@@ -36,7 +37,6 @@ function initFirebase(){
   }
   try{
     if(!window.firebase){toast('Firebase SDK não carregou','err');return;}
-    // Limpa app anterior se existir
     if(firebase.apps.length) firebase.apps[0].delete().catch(function(){});
     firebase.initializeApp(cfg);
     fbDb = firebase.database();
@@ -178,6 +178,7 @@ function onCodeFound(code){
       if(p.etiqueta_ml)details+='<div class="scan-detail-row"><span class="dl">Etiqueta</span><span class="dv mono">'+esc(p.etiqueta_ml)+'</span></div>';
       if(p.nome_produto)details+='<div class="scan-detail-row"><span class="dl">Produto</span><span class="dv">'+esc(p.nome_produto)+(p.marca?' — '+esc(p.marca):'')+'</span></div>';
       if(p.quantidade)details+='<div class="scan-detail-row"><span class="dl">Qtd</span><span class="dv">'+esc(p.quantidade)+'</span></div>';
+      if(p.galpao&&GALPOES[p.galpao])details+='<div class="scan-detail-row"><span class="dl">Galpão</span><span class="dv bold">🏭 '+esc(GALPOES[p.galpao])+'</span></div>';
       if(p.data_despacho)details+='<div class="scan-detail-row"><span class="dl">Prazo</span><span class="dv" style="color:'+(isAt?'var(--red)':ps==='hoje'?'#856404':'inherit')+';">'+fmtDate(p.data_despacho)+(isAt?' ⏰ ATRASADO':ps==='hoje'?' ⚠️ HOJE':'')+'</span></div>';
       var actionBtn='';
       if(s.next){actionBtn='<button class="btn btn-p btn-bl" style="margin-top:.75rem" onclick="window.advanceScan(\''+p.id+'\',\''+s.next+'\')">'+ SM[s.next].icon+' '+s.nxt+'</button>';}
@@ -252,7 +253,6 @@ function go(){
 }
 
 // ── HOME ────────────────────────────────────────────────────────────────────
-function pgHome(main){renderHome(main);}
 function renderHome(main){
   var c={recebido:0,separacao:0,expedicao:0,finalizado:0};
   ST.pedidos.forEach(function(p){if(c[p.status]!==undefined)c[p.status]++;});
@@ -296,17 +296,23 @@ function sCard(cls,ico,num,lbl){return '<div class="stat-card '+cls+'"><span cla
 function pgPedidos(main){
   var chips='<span class="chip '+(!ST.fStatus?'on':'')+' " onclick="window.fSt(null)">Todos</span>';
   SO.forEach(function(s){chips+='<span class="chip '+(ST.fStatus===s?'on '+s:'')+' " onclick="window.fSt(\''+s+'\')">'+ SM[s].icon+' '+SM[s].label+'</span>';});
+  var gchips='<span class="chip '+(!ST.fGalpao?'on':'')+' " onclick="window.fGal(null)">Todos</span>';
+  Object.keys(GALPOES).forEach(function(k){gchips+='<span class="chip '+(ST.fGalpao===k?'on':'')+' " onclick="window.fGal(\''+k+'\')">'+ GALPOES[k]+'</span>';});
   main.innerHTML='<div class="page"><div class="search-wrap">'+
     '<svg class="si" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>'+
     '<input type="search" id="si" placeholder="Nome, venda, código, etiqueta..." value="'+esc(ST.fSearch)+'" oninput="window.doSearch(this.value)" autocomplete="off">'+
-    '</div><div class="chips">'+chips+'</div><div id="lst"></div></div>';
+    '</div>'+
+    '<div class="filter-label">Status</div><div class="chips">'+chips+'</div>'+
+    '<div class="filter-label">Galpão</div><div class="chips">'+gchips+'</div>'+
+    '<div id="lst"></div></div>';
   renderList();
 }
 function renderList(){
   var el=g('lst');if(!el)return;
   var d=ST.pedidos.slice();
   if(ST.fStatus)d=d.filter(function(p){return p.status===ST.fStatus;});
-  if(ST.fSearch){var q=ST.fSearch.toLowerCase();d=d.filter(function(p){return[p.nome_cliente,p.codigo_produto,p.numero_venda,p.etiqueta_ml,p.nome_produto,p.marca].some(function(v){return v&&v.toLowerCase().indexOf(q)>=0;});});}
+  if(ST.fGalpao)d=d.filter(function(p){return p.galpao===ST.fGalpao;});
+  if(ST.fSearch){var q=ST.fSearch.toLowerCase();d=d.filter(function(p){return[p.nome_cliente,p.codigo_produto,p.numero_venda,p.etiqueta_ml,p.nome_produto,p.marca,p.galpao&&GALPOES[p.galpao]].some(function(v){return v&&v.toLowerCase().indexOf(q)>=0;});});}
   if(!d.length){el.innerHTML='<div class="empty"><span class="empty-ico">🔍</span><h3>Nenhum pedido encontrado</h3></div>';return;}
   var h='<div style="display:flex;flex-direction:column;gap:.75rem">';
   d.forEach(function(p){h+=orderCard(p);});
@@ -320,6 +326,7 @@ function orderCard(p){
   var meta='';
   if(p.numero_venda)meta+='<span class="meta">🏷 <strong>'+esc(p.numero_venda)+'</strong></span>';
   if(p.codigo_produto)meta+='<span class="meta">📊 '+esc(p.codigo_produto)+'</span>';
+  if(p.galpao&&GALPOES[p.galpao])meta+='<span class="meta">🏭 '+esc(GALPOES[p.galpao])+'</span>';
   if(p.nome_produto)meta+='<span class="meta">'+esc(p.nome_produto)+(p.marca?' — '+esc(p.marca):'')+'</span>';
   if(p.quantidade)meta+='<span class="meta">Qtd: '+esc(p.quantidade)+'</span>';
   if(p.data_despacho&&p.status!=='finalizado'){meta+='<span class="meta '+(isAt?'danger':ps==='hoje'?'warn':'')+' ">Prazo: '+fmtDate(p.data_despacho)+(isAt?' ⏰':ps==='hoje'?' ⚠️':'')+'</span>';}
@@ -356,7 +363,7 @@ function pgDetalhe(main,id){
   var p=getPedido(id);
   if(!p){main.innerHTML='<div class="page"><div class="empty"><span class="empty-ico">❌</span><h3>Pedido não encontrado</h3></div></div>';return;}
   var s=SM[p.status]||SM.recebido;var ci=SO.indexOf(p.status);var ps=prazoStatus(p.data_despacho);
-  var dupes=p.numero_venda?ST.pedidos.filter(function(x){return x.numero_venda===p.numero_venda&&x.id!==p.id;}):[];
+  var dupes=p.numero_venda?ST.pedidos.filter(function(x){return x.numero_venda===p.numero_venda&&x.id!==p.id;}):[]
   var h='<div class="page">';
   if(ps==='atrasado'&&p.status!=='finalizado')h+='<div style="background:#fef2f2;border:1.5px solid #fecaca;border-radius:var(--r);padding:.75rem 1rem;color:#b91c1c;font-weight:700">⏰ PRAZO VENCIDO — '+fmtDate(p.data_despacho)+'</div>';
   if(ps==='hoje'&&p.status!=='finalizado')h+='<div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:var(--r);padding:.75rem 1rem;color:#856404;font-weight:700">⚠️ DESPACHAR HOJE!</div>';
@@ -365,13 +372,14 @@ function pgDetalhe(main,id){
   SO.forEach(function(st,i){var cl=i<ci?'done':(i===ci?'active':'');h+='<div class="pstep '+cl+'"><div class="pdot">'+(i<ci?'✓':String(i+1))+'</div><span class="plbl">'+SM[st].label+'</span></div>';});
   h+='</div><div class="dcard"><div class="fb"><h2 style="font-size:1.1rem;font-weight:800;flex:1;padding-right:.5rem">'+esc(p.nome_cliente||'Cliente não informado')+'</h2><span class="badge '+p.status+'">'+s.icon+' '+s.label+'</span></div><div class="dg">';
   h+=dfield('Nº Venda ML',p.numero_venda);h+=dfield('Cód. Produto',p.codigo_produto);h+=dfield('Etiqueta ML',p.etiqueta_ml);h+=dfield('Produto',p.nome_produto);h+=dfield('Marca',p.marca);h+=dfield('Quantidade',p.quantidade);
+  if(p.galpao&&GALPOES[p.galpao])h+=dfield('Galpão','🏭 '+GALPOES[p.galpao]);
   if(p.data_despacho)h+='<div class="df"><span class="dl">Prazo Despacho</span><span class="dv" style="color:'+(ps==='atrasado'?'var(--red)':ps==='hoje'?'#856404':'inherit')+';">'+fmtDate(p.data_despacho)+(ps==='atrasado'?' ⏰':ps==='hoje'?' ⚠️':'')+'</span></div>';
   if(p.created_at)h+=dfield('Cadastrado',new Date(p.created_at).toLocaleString('pt-BR'));
   h+='</div>';
   if(p.observacoes)h+='<div class="df"><span class="dl">Observações</span><span class="dv">'+esc(p.observacoes)+'</span></div>';
   h+='</div>';
   if(s.next){
-    h+='<button class="act-btn '+s.next+'" onclick="window.advance(\''+p.id+'\',\''+s.next+'\')"><div class="act-ico '+s.next+'">'+SM[s.next].icon+'</div><div style="flex:1"><div style="font-weight:800;font-size:.95rem">'+esc(s.nxt)+'</div><div style="font-size:.75rem;color:var(--muted);margin-top:2px">→ '+SM[s.next].label+'</div></div><svg style="opacity:.4" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg></button>';
+    h+='<button class="act-btn '+s.next+'" onclick="window.advance(\''+p.id+'\',\''+s.next+'\')" ><div class="act-ico '+s.next+'">'+SM[s.next].icon+'</div><div style="flex:1"><div style="font-weight:800;font-size:.95rem">'+esc(s.nxt)+'</div><div style="font-size:.75rem;color:var(--muted);margin-top:2px">→ '+SM[s.next].label+'</div></div><svg style="opacity:.4" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg></button>';
   }else{
     h+='<div style="background:var(--s-fin-bg);border-radius:var(--r);padding:1rem;text-align:center;color:#2e7d32;font-weight:700">✅ Pedido Despachado</div>';
   }
@@ -397,6 +405,7 @@ function pgEditar(main,id){
 function buildForm(p){
   if(!p)p={};
   var opts='';SO.forEach(function(s){opts+='<option value="'+s+'"'+(p.status===s?' selected':'')+'>'+SM[s].label+'</option>';});
+  var gchips='';Object.keys(GALPOES).forEach(function(k){gchips+='<span class="chip'+(p.galpao===k?' on':'')+' galpao-chip" onclick="window.pickGalpao(\''+k+'\')" data-gv="'+k+'">'+GALPOES[k]+'</span>';});
   return '<div class="fg"><label class="fl">Cliente *</label><input class="fc" id="fn" type="text" placeholder="Ex: Amarildo da Conceição" value="'+esc(p.nome_cliente||'')+'"></div>'+
     '<div class="g2"><div class="fg"><label class="fl">Nº Venda ML</label><input class="fc" id="fv" type="text" placeholder="2000001296..." value="'+esc(p.numero_venda||'')+'"></div>'+
     '<div class="fg"><label class="fl">Etiqueta ML</label><input class="fc" id="fe" type="text" placeholder="BR0001..." value="'+esc(p.etiqueta_ml||'')+'"></div></div>'+
@@ -405,6 +414,7 @@ function buildForm(p){
     '<div class="fg"><label class="fl">Nome do Produto</label><input class="fc" id="fp" type="text" placeholder="Ex: Kit Correia Dentada Jeep" value="'+esc(p.nome_produto||'')+'"></div>'+
     '<div class="g2"><div class="fg"><label class="fl">Marca</label><input class="fc" id="fm" type="text" placeholder="Ex: Gates" value="'+esc(p.marca||'')+'"></div>'+
     '<div class="fg"><label class="fl">Prazo Despacho</label><input class="fc" id="fd" type="date" value="'+esc(p.data_despacho||'')+'"></div></div>'+
+    '<div class="fg"><label class="fl">Galpão</label><div class="chips" id="galpao-chips">'+gchips+'</div><input type="hidden" id="fg" value="'+esc(p.galpao||'')+'"></div>'+
     '<div class="fg"><label class="fl">Status</label><select class="fc" id="fs">'+opts+'</select></div>'+
     '<div class="fg"><label class="fl">Observações</label><textarea class="fc" id="fo" placeholder="Notas...">'+esc(p.observacoes||'')+'</textarea></div>';
 }
@@ -416,7 +426,6 @@ function pgConfig(main){
   var fbStatus=fbDb
     ?'<span style="color:var(--s-fin)">🟢 Conectado e sincronizando</span>'
     :'<span style="color:var(--red)">🔴 Não conectado — configure abaixo</span>';
-  // Mostra config atual (sem expor, só o projectId)
   var projectHint=cfg.projectId?'<p class="muted sm">Projeto: <strong>'+esc(cfg.projectId)+'</strong></p>':'';
   main.innerHTML='<div class="page">'+
     '<div class="csec"><div class="csec-ttl">🔥 Firebase Realtime Database</div>'+
@@ -433,13 +442,8 @@ function pgConfig(main){
     '</div></div>'+
     '<div class="csec"><div class="csec-ttl">📜 Regras do Firebase (1x só)</div>'+
     '<p class="muted sm" style="margin-bottom:.5rem">No Firebase Console → Realtime Database → Regras:</p>'+
-    '<code style="background:#f8fafc;border:1px solid var(--border);border-radius:var(--rs);padding:.75rem;display:block;font-size:.75rem;white-space:pre">{
-  "rules": {
-    ".read": true,
-    ".write": true
-  }
-}</code>'+
-    '<p class="muted sm" style="margin-top:.5rem">Para mais segurança: restrinja o apiKey no <a href="https://console.cloud.google.com" target="_blank">Google Cloud Console</a> para aceitar só de speedboymotoboy.github.io.</p>'+
+    '<code style="background:#f8fafc;border:1px solid var(--border);border-radius:var(--rs);padding:.75rem;display:block;font-size:.75rem;white-space:pre">{\n  &quot;rules&quot;: {\n    &quot;.read&quot;: true,\n    &quot;.write&quot;: true\n  }\n}</code>'+
+    '<p class="muted sm" style="margin-top:.5rem">Para mais segurança: restrinja o apiKey no Google Cloud Console para aceitar só de speedboymotoboy.github.io.</p>'+
     '</div>'+
     '<div class="csec"><div class="csec-ttl">📊 Dados ('+n+' pedido'+(n!==1?'s':'')+' em cache)</div>'+
     '<div style="display:flex;gap:.75rem">'+
@@ -476,8 +480,7 @@ window.clearFbCfg=function(){
 // ── FORM ACTIONS ─────────────────────────────────────────────────────────────
 function formData(){
   function v(id){var el=g(id);return el&&el.value.trim()?el.value.trim():null;}
-  return{nome_cliente:v('fn'),numero_venda:v('fv'),etiqueta_ml:v('fe'),codigo_produto:v('fc2')?v('fc2').toUpperCase():null,nome_produto:v('fp'),marca:v('fm'),quantidade:v('fq'),data_despacho:v('fd'),status:g('fs')?g('fs').value:'recebido',observacoes:v('fo')};
-}
+  return{nome_cliente:v('fn'),numero_venda:v('fv'),etiqueta_ml:v('fe'),codigo_produto:v('fc2')?v('fc2').toUpperCase():null,nome_produto:v('fp'),marca:v('fm'),quantidade:v('fq'),data_despacho:v('fd'),status:g('fs')?g('fs').value:'recebido',observacoes:v('fo'),galpao:v('fg')};}
 window.saveNovo=function(){
   var d=formData();
   if(!d.nome_cliente){toast('Informe o nome do cliente','err');return;}
@@ -496,6 +499,11 @@ window.confirmClear=function(){modal('<div class="modal"><div class="modal-ttl">
 window.doClear=function(){window.closeModal();ST.pedidos=[];saveData();toast('Cache limpo','ok');location.hash='#/';};
 window.doSearch=function(v){ST.fSearch=v;renderList();};
 window.fSt=function(v){ST.fStatus=v;pgPedidos(g('app-main'));};
+window.fGal=function(v){ST.fGalpao=v;pgPedidos(g('app-main'));};
+window.pickGalpao=function(k){
+  var hi=g('fg');if(hi)hi.value=k;
+  document.querySelectorAll('.galpao-chip').forEach(function(c){c.classList.toggle('on',c.dataset.gv===k);});
+};
 window.parseWpp=function(){
   var wt=g('wt');var txt=wt?wt.value:'';
   if(!txt.trim()){toast('Cole o texto primeiro','err');return;}

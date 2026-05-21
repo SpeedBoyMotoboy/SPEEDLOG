@@ -37,6 +37,7 @@ body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-seri
 .search-wrap input{width:100%;padding:.75rem 1rem .75rem 2.75rem;border:1.5px solid var(--border);border-radius:var(--r);font-size:.95rem;background:var(--card);outline:none;transition:border-color .2s;color:var(--text);font-family:inherit}
 .search-wrap input:focus{border-color:var(--blue)}
 .si{position:absolute;left:.85rem;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
+.filter-label{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);padding-left:.25rem;margin-bottom:-.25rem}
 .chips{display:flex;gap:.5rem;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
 .chips::-webkit-scrollbar{display:none}
 .chip{flex-shrink:0;padding:5px 14px;border-radius:20px;border:1.5px solid var(--border);font-size:.75rem;font-weight:600;background:var(--card);color:var(--muted);cursor:pointer;white-space:nowrap;-webkit-tap-highlight-color:transparent;transition:all .15s}
