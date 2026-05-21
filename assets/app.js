@@ -1,5 +1,6 @@
-// SpeedLog v5 — Firebase RTDB
+// SpeedLog v6 — Firebase config via Config page (não exposta no código)
 var DATA_KEY = 'sl_data';
+var FB_KEY   = 'sl_fb';
 
 var SM = {
   recebido:  {label:'Recebido',   icon:'📥', next:'separacao',  nxt:'Iniciar Separação'},
@@ -8,16 +9,6 @@ var SM = {
   finalizado:{label:'Despachado', icon:'✅',        next:null,         nxt:null}
 };
 var SO = ['recebido','separacao','expedicao','finalizado'];
-
-var FB = {
-  apiKey: 'AIzaSyDL8c28T9Q-IAK9JihzEXtT-OPiYOx24Jg',
-  authDomain: 'speedboy-3c1c6.firebaseapp.com',
-  projectId: 'speedboy-3c1c6',
-  storageBucket: 'speedboy-3c1c6.firebasestorage.app',
-  messagingSenderId: '702743802978',
-  appId: '1:702743802978:web:7b99217bebcc89f9bc8d3b',
-  databaseURL: 'https://speedboy-3c1c6-default-rtdb.firebaseio.com'
-};
 
 var ST = {pedidos:[], fStatus:null, fSearch:''};
 var fbDb = null;
@@ -33,12 +24,21 @@ function fmtDate(s){if(!s)return'';try{return new Date(s+'T12:00:00').toLocaleDa
 
 function loadData(){try{ST.pedidos=JSON.parse(localStorage.getItem(DATA_KEY)||'[]');}catch(e){ST.pedidos=[];}}
 function saveData(){try{localStorage.setItem(DATA_KEY,JSON.stringify(ST.pedidos));}catch(e){}}
+function getFbConfig(){try{return JSON.parse(localStorage.getItem(FB_KEY)||'null');}catch(e){return null;}}
+function saveFbConfig(c){localStorage.setItem(FB_KEY,JSON.stringify(c));}
 
 // ── FIREBASE ────────────────────────────────────────────────────────────────
 function initFirebase(){
+  var cfg = getFbConfig();
+  if(!cfg || !cfg.databaseURL){
+    fbDb = null;
+    return;
+  }
   try{
     if(!window.firebase){toast('Firebase SDK não carregou','err');return;}
-    if(!firebase.apps.length) firebase.initializeApp(FB);
+    // Limpa app anterior se existir
+    if(firebase.apps.length) firebase.apps[0].delete().catch(function(){});
+    firebase.initializeApp(cfg);
     fbDb = firebase.database();
     fbDb.ref('pedidos').on('value', function(snap){
       var raw = snap.val()||{};
@@ -46,7 +46,6 @@ function initFirebase(){
       arr.sort(function(a,b){return (b.created_at||'').localeCompare(a.created_at||'');});
       ST.pedidos = arr;
       saveData();
-      // Refresh list/home without leaving current page
       var page = routeParse().page;
       var main = g('app-main');
       if(page==='home' && main) renderHome(main);
@@ -54,13 +53,14 @@ function initFirebase(){
       updateAlertBadge();
     }, function(err){
       var msg = err.message||'';
-      if(msg.indexOf('Permission')>=0 || msg.indexOf('permission')>=0){
-        toast('Firebase: abra Config e siga as instruções de regras','err');
+      if(msg.indexOf('Permission')>=0||msg.indexOf('permission')>=0){
+        toast('Firebase: configure as Regras no Console','err');
       } else {
         toast('Firebase: '+msg,'err');
       }
     });
   }catch(e){
+    fbDb = null;
     toast('Erro Firebase: '+e.message,'err');
   }
 }
@@ -113,8 +113,7 @@ function getAlerts(){
   var hojeL=ativos.filter(function(p){return prazoStatus(p.data_despacho)==='hoje';});
   var vm={};
   ST.pedidos.forEach(function(p){if(p.numero_venda){if(!vm[p.numero_venda])vm[p.numero_venda]=[];vm[p.numero_venda].push(p);}});
-  var dups=[];
-  for(var k in vm){if(vm[k].length>1)dups=dups.concat(vm[k]);}
+  var dups=[];for(var k in vm){if(vm[k].length>1)dups=dups.concat(vm[k]);}
   var cutoff=new Date(Date.now()-3*86400000).toISOString();
   var parados=ST.pedidos.filter(function(p){return p.status==='recebido'&&p.created_at<cutoff;});
   return{atrasados:atrasados,hoje:hojeL,duplicados:dups,parados:parados,total:atrasados.length+hojeL.length+dups.length+parados.length};
@@ -122,13 +121,11 @@ function getAlerts(){
 
 // ── SCANNER ─────────────────────────────────────────────────────────────────
 function stopScanner(){if(qrScanner){try{qrScanner.stop().catch(function(){});}catch(e){}qrScanner=null;}}
-
 function startScanner(){
   stopScanner();
   var reader=g('reader');
   if(!reader||!window.Html5Qrcode){
-    var st=g('scan-status');
-    if(st)st.innerHTML='<div class="empty"><span class="empty-ico">📷</span><h3>Use o campo abaixo para digitar o código</h3></div>';
+    var st=g('scan-status');if(st)st.innerHTML='<div class="empty"><span class="empty-ico">📷</span><h3>Use o campo abaixo para digitar o código</h3></div>';
     return;
   }
   try{
@@ -139,106 +136,62 @@ function startScanner(){
       function(code){stopScanner();onCodeFound(code);},
       function(){}
     ).catch(function(){
-      var st=g('scan-status');
-      if(st)st.innerHTML='<div class="empty"><span class="empty-ico">📷</span><h3>Permita acesso à câmera</h3><p>Toque no cadeado na barra de endereço e autorize.</p></div>';
+      var st=g('scan-status');if(st)st.innerHTML='<div class="empty"><span class="empty-ico">📷</span><h3>Permita acesso à câmera</h3><p>Toque no cadeado na barra de endereço e autorize.</p></div>';
     });
   }catch(e){
-    var st=g('scan-status');
-    if(st)st.innerHTML='<div class="empty"><span class="empty-ico">📷</span><h3>Erro: '+esc(e.message)+'</h3></div>';
+    var st=g('scan-status');if(st)st.innerHTML='<div class="empty"><span class="empty-ico">📷</span><h3>Erro: '+esc(e.message)+'</h3></div>';
   }
 }
 
-// Quando um código é lido pela câmera ou digitado manualmente
 function onCodeFound(code){
-  var r=g('scan-result');
-  if(!r)return;
+  var r=g('scan-result');if(!r)return;
   var codeU=code.trim().toUpperCase();
   var codeT=code.trim();
-
-  // Busca em múltiplos campos
   var matches=ST.pedidos.filter(function(p){
-    return (
-      (p.codigo_produto && p.codigo_produto.trim().toUpperCase()===codeU) ||
-      (p.etiqueta_ml    && p.etiqueta_ml.trim().toUpperCase()===codeU)    ||
-      (p.numero_venda   && p.numero_venda.trim()===codeT)                 ||
-      (p.etiqueta_ml    && codeU.length>5 && p.etiqueta_ml.toUpperCase().indexOf(codeU)>=0)
+    return(
+      (p.codigo_produto&&p.codigo_produto.trim().toUpperCase()===codeU)||
+      (p.etiqueta_ml&&p.etiqueta_ml.trim().toUpperCase()===codeU)||
+      (p.numero_venda&&p.numero_venda.trim()===codeT)||
+      (p.etiqueta_ml&&codeU.length>5&&p.etiqueta_ml.toUpperCase().indexOf(codeU)>=0)
     );
   });
-
-  var topBar =
-    '<div class="scan-code">'+
-    '<span style="font-size:1.4rem">🔍</span>'+
-    '<span class="scan-code-val">'+esc(codeT)+'</span>'+
-    '<button class="btn btn-n" style="font-size:.8rem;padding:.4rem .8rem;min-height:36px" onclick="window.restartScan()">Nova bipagem</button>'+
-    '</div>';
-
+  var topBar='<div class="scan-code"><span style="font-size:1.4rem">🔍</span><span class="scan-code-val">'+esc(codeT)+'</span><button class="btn btn-n" style="font-size:.8rem;padding:.4rem .8rem;min-height:36px" onclick="window.restartScan()">Nova bipagem</button></div>';
   if(matches.length===0){
-    // Nenhum pedido cadastrado com este código ainda
-    // Detectar tipo de campo para pré-preenchimento
-    var campo='fc2'; var tipoLabel='código de produto';
+    var campo='fc2';var tipoLabel='código de produto';
     if(/^(ML|BR)[A-Z0-9]{5,}$/i.test(codeT)){campo='fe';tipoLabel='etiqueta Mercado Livre';}
     else if(/^\d{10,}$/.test(codeT)){campo='fv';tipoLabel='número de venda';}
-    PREFILL={campo:campo, valor:campo==='fc2'?codeU:codeT};
-
+    PREFILL={campo:campo,valor:campo==='fc2'?codeU:codeT};
     var noPedidos=ST.pedidos.length===0;
     var msg=noPedidos
-      ? '<p style="color:var(--muted);font-size:.85rem">Nenhum pedido cadastrado ainda.<br>Primeiro <strong>cadastre as etiquetas do WhatsApp</strong> e depois bipe para encontrar.</p>'
-      : '<p style="color:var(--muted);font-size:.85rem">Nenhum pedido com '+tipoLabel+' <strong>'+esc(codeT)+'</strong>.<br>Cadastre o pedido agora com o código já preenchido:</p>';
-
-    r.innerHTML=
-      '<div class="scan-result">'+topBar+
-      '<div class="scan-matches">'+
-      '<div class="no-match" style="padding:1.25rem;text-align:center">'+
-      '<div style="font-size:2.5rem;margin-bottom:.5rem">🤔</div>'+
-      '<div style="font-weight:700;font-size:1rem;margin-bottom:.5rem">Não encontrado</div>'+
-      msg+
-      '<a href="#/novo" class="btn btn-p btn-bl" style="margin-top:.75rem">+ Cadastrar pedido com este código</a>'+
-      '</div></div></div>';
-  } else {
-    // ENCONTROU — mostra detalhes completos do pedido inline
+      ?'<p style="color:var(--muted);font-size:.85rem">Nenhum pedido cadastrado ainda.<br>Cadastre as etiquetas do WhatsApp primeiro, depois bipe para encontrar.</p>'
+      :'<p style="color:var(--muted);font-size:.85rem">Nenhum pedido com '+tipoLabel+' <strong>'+esc(codeT)+'</strong>.<br>Cadastre agora com o código já preenchido:</p>';
+    r.innerHTML='<div class="scan-result">'+topBar+'<div class="scan-matches"><div class="no-match" style="padding:1.25rem;text-align:center"><div style="font-size:2.5rem;margin-bottom:.5rem">🤔</div><div style="font-weight:700;font-size:1rem;margin-bottom:.5rem">Não encontrado</div>'+msg+'<a href="#/novo" class="btn btn-p btn-bl" style="margin-top:.75rem">+ Cadastrar pedido com este código</a></div></div></div>';
+  }else{
     var cards='';
     matches.forEach(function(p){
       var s=SM[p.status]||SM.recebido;
       var ps=prazoStatus(p.data_despacho);
       var isAt=ps==='atrasado'&&p.status!=='finalizado';
-
       var details='';
-      if(p.nome_cliente) details+='<div class="scan-detail-row"><span class="dl">Cliente</span><span class="dv bold">'+esc(p.nome_cliente)+'</span></div>';
-      if(p.numero_venda)  details+='<div class="scan-detail-row"><span class="dl">Venda ML</span><span class="dv mono">'+esc(p.numero_venda)+'</span></div>';
-      if(p.etiqueta_ml)   details+='<div class="scan-detail-row"><span class="dl">Etiqueta</span><span class="dv mono">'+esc(p.etiqueta_ml)+'</span></div>';
-      if(p.nome_produto)  details+='<div class="scan-detail-row"><span class="dl">Produto</span><span class="dv">'+esc(p.nome_produto)+(p.marca?' — '+esc(p.marca):'')+'</span></div>';
-      if(p.quantidade)    details+='<div class="scan-detail-row"><span class="dl">Qtd</span><span class="dv">'+esc(p.quantidade)+'</span></div>';
-      if(p.data_despacho) details+='<div class="scan-detail-row"><span class="dl">Prazo</span><span class="dv" style="color:'+(isAt?'var(--red)':ps==='hoje'?'#856404':'inherit')+';">'+fmtDate(p.data_despacho)+(isAt?' ⏰ ATRASADO':ps==='hoje'?' ⚠️ HOJE':'')+'</span></div>';
-
+      if(p.nome_cliente)details+='<div class="scan-detail-row"><span class="dl">Cliente</span><span class="dv bold">'+esc(p.nome_cliente)+'</span></div>';
+      if(p.numero_venda)details+='<div class="scan-detail-row"><span class="dl">Venda ML</span><span class="dv mono">'+esc(p.numero_venda)+'</span></div>';
+      if(p.etiqueta_ml)details+='<div class="scan-detail-row"><span class="dl">Etiqueta</span><span class="dv mono">'+esc(p.etiqueta_ml)+'</span></div>';
+      if(p.nome_produto)details+='<div class="scan-detail-row"><span class="dl">Produto</span><span class="dv">'+esc(p.nome_produto)+(p.marca?' — '+esc(p.marca):'')+'</span></div>';
+      if(p.quantidade)details+='<div class="scan-detail-row"><span class="dl">Qtd</span><span class="dv">'+esc(p.quantidade)+'</span></div>';
+      if(p.data_despacho)details+='<div class="scan-detail-row"><span class="dl">Prazo</span><span class="dv" style="color:'+(isAt?'var(--red)':ps==='hoje'?'#856404':'inherit')+';">'+fmtDate(p.data_despacho)+(isAt?' ⏰ ATRASADO':ps==='hoje'?' ⚠️ HOJE':'')+'</span></div>';
       var actionBtn='';
-      if(s.next){
-        actionBtn='<button class="btn btn-p btn-bl" style="margin-top:.75rem" onclick="window.advanceScan(\''+p.id+'\',\''+s.next+'\')">';
-        actionBtn+=SM[s.next].icon+' '+s.nxt+'</button>';
-      }
-
-      cards+=
-        '<div class="scan-match-card '+(isAt?'atrasado':p.status)+'">'+
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">'+
-        '<span class="badge '+p.status+'">'+s.icon+' '+s.label+'</span>'+
-        '<a href="#/pedido/'+p.id+'" style="font-size:.78rem;color:var(--blue);font-weight:600">Ver detalhes →</a>'+
-        '</div>'+
-        details+
-        actionBtn+
-        '</div>';
+      if(s.next){actionBtn='<button class="btn btn-p btn-bl" style="margin-top:.75rem" onclick="window.advanceScan(\''+p.id+'\',\''+s.next+'\')">'+ SM[s.next].icon+' '+s.nxt+'</button>';}
+      cards+='<div class="scan-match-card '+(isAt?'atrasado':p.status)+'"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem"><span class="badge '+p.status+'">'+s.icon+' '+s.label+'</span><a href="#/pedido/'+p.id+'" style="font-size:.78rem;color:var(--blue);font-weight:600">Ver detalhes →</a></div>'+details+actionBtn+'</div>';
     });
-
     r.innerHTML='<div class="scan-result">'+topBar+'<div class="scan-matches">'+cards+'</div></div>';
   }
 }
-
 window.restartScan=function(){var r=g('scan-result');if(r)r.innerHTML='';startScanner();};
-
 window.advanceScan=function(id,nxt){
   updatePedido(id,{status:nxt});
   toast(SM[nxt].icon+' '+SM[nxt].label+' ✅','ok');
-  // Refresh scan result
   var p=getPedido(id);
-  if(p) onCodeFound(p.codigo_produto||p.etiqueta_ml||p.numero_venda||'');
+  if(p)onCodeFound(p.codigo_produto||p.etiqueta_ml||p.numero_venda||'');
 };
 
 // ── ROUTER ──────────────────────────────────────────────────────────────────
@@ -258,7 +211,7 @@ function routeParse(){
 
 function go(){
   stopScanner();
-  var route=routeParse(); var page=route.page,id=route.id;
+  var route=routeParse();var page=route.page,id=route.id;
   var main=g('app-main'),back=g('btn-back'),ttl=g('page-title'),acts=g('header-actions');
   if(!main)return;
   document.querySelectorAll('.nav-item').forEach(function(el){
@@ -305,6 +258,8 @@ function renderHome(main){
   ST.pedidos.forEach(function(p){if(c[p.status]!==undefined)c[p.status]++;});
   var urgent=ST.pedidos.filter(function(p){return p.status!=='finalizado';}).slice(0,6);
   var al=getAlerts();
+  var cfg=getFbConfig();
+  var fbStatus=fbDb?'🟢 Firebase sincronizado':(cfg&&cfg.databaseURL?'🟡 Reconectando...':'🔴 Configure Firebase em Config');
   var h='<div class="page">';
   h+='<div class="stats-grid">';
   h+=sCard('s-rec','📥',c.recebido,'Recebidos');
@@ -312,11 +267,11 @@ function renderHome(main){
   h+=sCard('s-exp','📦',c.expedicao,'Expedição');
   h+=sCard('s-fin','✅',c.finalizado,'Despachados');
   h+='</div>';
-  h+='<div style="text-align:center;font-size:.72rem;color:var(--muted)">'+(fbDb?'🟢 Firebase sincronizado':'🟡 Modo offline')+'</div>';
+  h+='<div style="text-align:center;font-size:.72rem;color:var(--muted)">'+fbStatus+'</div>';
   if(al.total>0){
     h+='<a href="#/alertas" style="background:#fef2f2;border-radius:var(--r);padding:1rem;display:flex;align-items:center;gap:.75rem;text-decoration:none;border:1.5px solid #fecaca">';
     h+='<span style="font-size:1.5rem">⚠️</span><div style="flex:1"><span style="font-weight:700;color:#b91c1c;font-size:.95rem">'+al.total+' alerta'+(al.total>1?'s':'')+'</span><br>';
-    h+='<span style="font-size:.8rem;color:#6b7280">'+al.atrasados.length+' atrasado·'+al.hoje.length+' hoje·'+al.duplicados.length+' duplicado</span></div>';
+    h+='<span style="font-size:.8rem;color:#6b7280">'+al.atrasados.length+' atrasado · '+al.hoje.length+' hoje · '+al.duplicados.length+' duplicado</span></div>';
     h+='<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="#b91c1c" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg></a>';
   }
   if(urgent.length){
@@ -330,7 +285,7 @@ function renderHome(main){
   if(ST.pedidos.length===0){
     h+='<div style="background:var(--blue);border-radius:var(--r);padding:1.25rem;color:#fff;text-align:center">';
     h+='<div style="font-size:1.8rem;margin-bottom:.5rem">🚚</div>';
-    h+='<p style="font-size:.9rem;opacity:.9;margin-bottom:.75rem"><strong>Como começar:</strong><br>1. Cole a etiqueta do WhatsApp em Novo Pedido<br>2. Bipe o produto no galpão para encontrar</p>';
+    h+='<p style="font-size:.9rem;opacity:.9;margin-bottom:.75rem"><strong>Como começar:</strong><br>1. Configure o Firebase em ⚙️ Config<br>2. Cole etiquetas ML em Novo Pedido<br>3. Bipe produtos no galpão para encontrar</p>';
     h+='<a href="#/novo" class="btn btn-o btn-bl">+ Cadastrar Etiqueta</a></div>';
   }
   main.innerHTML=h+'</div>';
@@ -341,7 +296,7 @@ function sCard(cls,ico,num,lbl){return '<div class="stat-card '+cls+'"><span cla
 function pgPedidos(main){
   var chips='<span class="chip '+(!ST.fStatus?'on':'')+' " onclick="window.fSt(null)">Todos</span>';
   SO.forEach(function(s){chips+='<span class="chip '+(ST.fStatus===s?'on '+s:'')+' " onclick="window.fSt(\''+s+'\')">'+ SM[s].icon+' '+SM[s].label+'</span>';});
-  main.innerHTML='<div class="page">'+'<div class="search-wrap">'+
+  main.innerHTML='<div class="page"><div class="search-wrap">'+
     '<svg class="si" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>'+
     '<input type="search" id="si" placeholder="Nome, venda, código, etiqueta..." value="'+esc(ST.fSearch)+'" oninput="window.doSearch(this.value)" autocomplete="off">'+
     '</div><div class="chips">'+chips+'</div><div id="lst"></div></div>';
@@ -369,29 +324,21 @@ function orderCard(p){
   if(p.quantidade)meta+='<span class="meta">Qtd: '+esc(p.quantidade)+'</span>';
   if(p.data_despacho&&p.status!=='finalizado'){meta+='<span class="meta '+(isAt?'danger':ps==='hoje'?'warn':'')+' ">Prazo: '+fmtDate(p.data_despacho)+(isAt?' ⏰':ps==='hoje'?' ⚠️':'')+'</span>';}
   if(dt)meta+='<span class="meta">📅 '+dt+'</span>';
-  return '<a href="#/pedido/'+p.id+'" class="order-card '+(isAt?'atrasado':p.status)+'">'+
-    '<div class="oc-hdr"><span class="oc-ttl">'+esc(p.nome_cliente||'Cliente não informado')+'</span><span class="badge '+p.status+'">'+s.icon+' '+s.label+'</span></div>'+
-    '<div class="oc-meta">'+meta+'</div></a>';
+  return '<a href="#/pedido/'+p.id+'" class="order-card '+(isAt?'atrasado':p.status)+'"><div class="oc-hdr"><span class="oc-ttl">'+esc(p.nome_cliente||'Cliente não informado')+'</span><span class="badge '+p.status+'">'+s.icon+' '+s.label+'</span></div><div class="oc-meta">'+meta+'</div></a>';
 }
 
 // ── BIPAR ────────────────────────────────────────────────────────────────────
 function pgBipar(main){
-  main.innerHTML='<div class="page">'+'<div class="scan-area"><div id="reader"></div><div class="scan-laser"></div></div>'+
+  main.innerHTML='<div class="page"><div class="scan-area"><div id="reader"></div><div class="scan-laser"></div></div>'+
     '<div class="scan-hint">📷 Bipe o código do produto para encontrar a etiqueta ML</div>'+
     '<div id="scan-status"></div><div id="scan-result"></div>'+
     '<div style="background:var(--card);border-radius:var(--r);padding:1rem;box-shadow:var(--sh)">'+
     '<div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:.75rem">Ou digite o código manualmente</div>'+
-    '<div style="display:flex;gap:.5rem">'+
-    '<input class="fc" id="manual-code" type="text" placeholder="Ex: KTB759" style="flex:1;text-transform:uppercase">'+
-    '<button class="btn btn-p" onclick="window.manualCode()">Buscar</button>'+
-    '</div></div></div>';
+    '<div style="display:flex;gap:.5rem"><input class="fc" id="manual-code" type="text" placeholder="Ex: KTB759" style="flex:1;text-transform:uppercase">'+
+    '<button class="btn btn-p" onclick="window.manualCode()">Buscar</button></div></div></div>';
   setTimeout(startScanner,200);
 }
-window.manualCode=function(){
-  var inp=g('manual-code');var code=inp?inp.value.trim().toUpperCase():'';
-  if(!code){toast('Digite um código','err');return;}
-  stopScanner();onCodeFound(code);
-};
+window.manualCode=function(){var inp=g('manual-code');var code=inp?inp.value.trim().toUpperCase():'';if(!code){toast('Digite um código','err');return;}stopScanner();onCodeFound(code);};
 
 // ── ALERTAS ──────────────────────────────────────────────────────────────────
 function pgAlertas(main){
@@ -400,10 +347,7 @@ function pgAlertas(main){
   var total=al.atrasados.length+al.hoje.length+al.duplicados.length+al.parados.length;
   var h='<div class="page">';
   if(total===0)h+='<div class="empty"><span class="empty-ico">✅</span><h3>Nenhum alerta!</h3><p>Todos os pedidos estão em dia.</p></div>';
-  h+=sec('⏰ Atrasados — prazo vencido','red',al.atrasados);
-  h+=sec('⚠️ Despachar hoje','yellow',al.hoje);
-  h+=sec('⚠️ Possíveis duplicatas','yellow',al.duplicados);
-  h+=sec('🕗 Parados há mais de 3 dias','blue',al.parados);
+  h+=sec('⏰ Atrasados','red',al.atrasados)+sec('⚠️ Despachar hoje','yellow',al.hoje)+sec('⚠️ Possíveis duplicatas','yellow',al.duplicados)+sec('🕗 Parados há mais de 3 dias','blue',al.parados);
   main.innerHTML=h+'</div>';
 }
 
@@ -419,8 +363,7 @@ function pgDetalhe(main,id){
   if(dupes.length)h+='<div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:var(--r);padding:.75rem 1rem;color:#856404;font-size:.875rem">⚠️ Esta venda aparece em '+(dupes.length+1)+' pedido(s). Pode ser duplicata.</div>';
   h+='<div class="sprog">';
   SO.forEach(function(st,i){var cl=i<ci?'done':(i===ci?'active':'');h+='<div class="pstep '+cl+'"><div class="pdot">'+(i<ci?'✓':String(i+1))+'</div><span class="plbl">'+SM[st].label+'</span></div>';});
-  h+='</div>';
-  h+='<div class="dcard"><div class="fb"><h2 style="font-size:1.1rem;font-weight:800;flex:1;padding-right:.5rem">'+esc(p.nome_cliente||'Cliente não informado')+'</h2><span class="badge '+p.status+'">'+s.icon+' '+s.label+'</span></div><div class="dg">';
+  h+='</div><div class="dcard"><div class="fb"><h2 style="font-size:1.1rem;font-weight:800;flex:1;padding-right:.5rem">'+esc(p.nome_cliente||'Cliente não informado')+'</h2><span class="badge '+p.status+'">'+s.icon+' '+s.label+'</span></div><div class="dg">';
   h+=dfield('Nº Venda ML',p.numero_venda);h+=dfield('Cód. Produto',p.codigo_produto);h+=dfield('Etiqueta ML',p.etiqueta_ml);h+=dfield('Produto',p.nome_produto);h+=dfield('Marca',p.marca);h+=dfield('Quantidade',p.quantidade);
   if(p.data_despacho)h+='<div class="df"><span class="dl">Prazo Despacho</span><span class="dv" style="color:'+(ps==='atrasado'?'var(--red)':ps==='hoje'?'#856404':'inherit')+';">'+fmtDate(p.data_despacho)+(ps==='atrasado'?' ⏰':ps==='hoje'?' ⚠️':'')+'</span></div>';
   if(p.created_at)h+=dfield('Cadastrado',new Date(p.created_at).toLocaleString('pt-BR'));
@@ -428,10 +371,7 @@ function pgDetalhe(main,id){
   if(p.observacoes)h+='<div class="df"><span class="dl">Observações</span><span class="dv">'+esc(p.observacoes)+'</span></div>';
   h+='</div>';
   if(s.next){
-    h+='<button class="act-btn '+s.next+'" onclick="window.advance(\''+p.id+'\',\''+s.next+'\')">';
-    h+='<div class="act-ico '+s.next+'">'+SM[s.next].icon+'</div>';
-    h+='<div style="flex:1"><div style="font-weight:800;font-size:.95rem">'+esc(s.nxt)+'</div><div style="font-size:.75rem;color:var(--muted);margin-top:2px">→ '+SM[s.next].label+'</div></div>';
-    h+='<svg style="opacity:.4" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg></button>';
+    h+='<button class="act-btn '+s.next+'" onclick="window.advance(\''+p.id+'\',\''+s.next+'\')"><div class="act-ico '+s.next+'">'+SM[s.next].icon+'</div><div style="flex:1"><div style="font-weight:800;font-size:.95rem">'+esc(s.nxt)+'</div><div style="font-size:.75rem;color:var(--muted);margin-top:2px">→ '+SM[s.next].label+'</div></div><svg style="opacity:.4" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg></button>';
   }else{
     h+='<div style="background:var(--s-fin-bg);border-radius:var(--r);padding:1rem;text-align:center;color:#2e7d32;font-weight:700">✅ Pedido Despachado</div>';
   }
@@ -439,24 +379,21 @@ function pgDetalhe(main,id){
 }
 function dfield(l,v){if(v==null||v==='')return'';return'<div class="df"><span class="dl">'+l+'</span><span class="dv">'+esc(String(v))+'</span></div>';}
 
-// ── NOVO ─────────────────────────────────────────────────────────────────────
+// ── NOVO / EDITAR ───────────────────────────────────────────────────────────────
 function pgNovo(main){
-  main.innerHTML='<div class="page">'+'<div class="wbox">'+'<div class="wbox-hdr"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="#25D366"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg> Colar texto do WhatsApp</div>'+
+  main.innerHTML='<div class="page"><div class="wbox"><div class="wbox-hdr"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="#25D366"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg> Colar texto do WhatsApp</div>'+
     '<p class="muted sm" style="margin-bottom:.5rem">Cole a mensagem com VENDA / CLIENTE / PRODUTO / CÓDIGO / QUANTIDADE</p>'+
     '<textarea class="fc" id="wt" rows="5" placeholder="VENDA: 2000001...\nCLIENTE: João Silva\nPRODUTO: Kit Correia\nCÓDIGO: KTB759\nQUANTIDADE: 1 KIT"></textarea>'+
-    '<button class="btn btn-n btn-bl mt" onclick="window.parseWpp()">🔍 Interpretar e preencher</button>'+'</div>'+
+    '<button class="btn btn-n btn-bl mt" onclick="window.parseWpp()">🔍 Interpretar e preencher</button></div>'+
     '<div class="dcard"><span style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Dados do Pedido</span>'+buildForm(null)+
     '<button class="btn btn-p btn-bl mt2" onclick="window.saveNovo()">💾 Salvar Pedido</button></div></div>';
   if(PREFILL){setTimeout(function(){var el=g(PREFILL.campo);if(el){el.value=PREFILL.valor;el.focus();}PREFILL=null;},50);}
 }
-
-// ── EDITAR ───────────────────────────────────────────────────────────────────
 function pgEditar(main,id){
   var p=getPedido(id);
   if(!p){main.innerHTML='<div class="page"><div class="empty"><span class="empty-ico">❌</span><h3>Não encontrado</h3></div></div>';return;}
   main.innerHTML='<div class="page"><div class="dcard">'+buildForm(p)+'<button class="btn btn-p btn-bl mt2" onclick="window.saveEditar(\''+id+'\')" >💾 Salvar Alterações</button></div></div>';
 }
-
 function buildForm(p){
   if(!p)p={};
   var opts='';SO.forEach(function(s){opts+='<option value="'+s+'"'+(p.status===s?' selected':'')+'>'+SM[s].label+'</option>';});
@@ -475,21 +412,66 @@ function buildForm(p){
 // ── CONFIG ───────────────────────────────────────────────────────────────────
 function pgConfig(main){
   var n=ST.pedidos.length;
-  var fbStatus=fbDb?'<span style="color:var(--s-fin)">🟢 Firebase conectado — sincronizando em tempo real</span>':'<span style="color:var(--red)">🔴 Firebase não conectado</span>';
-  main.innerHTML='<div class="page">'+'<div class="csec"><div class="csec-ttl">🔥 Firebase Realtime Database</div>'+
-    '<div style="padding:.5rem 0">'+fbStatus+'</div>'+
-    '<p class="muted sm">Projeto: <strong>speedboy-3c1c6</strong> — sincroniza todos os celulares automaticamente</p>'+
-    '<div style="background:#fff3cd;border-radius:var(--rs);padding:.75rem;margin-top:.75rem;font-size:.8rem;color:#856404">'+
-    '<strong>⚠️ Passo obrigatório (1x apenas):</strong><br>'+
-    'Acesse <strong>console.firebase.google.com</strong> → speedboy-3c1c6 → Realtime Database → Regras → publique:<br>'+
-    '<code style="background:#fff;padding:4px 8px;border-radius:4px;display:block;margin-top:.5rem;font-size:.75rem">{ "rules": { ".read": true, ".write": true } }</code>'+
+  var cfg=getFbConfig()||{};
+  var fbStatus=fbDb
+    ?'<span style="color:var(--s-fin)">🟢 Conectado e sincronizando</span>'
+    :'<span style="color:var(--red)">🔴 Não conectado — configure abaixo</span>';
+  // Mostra config atual (sem expor, só o projectId)
+  var projectHint=cfg.projectId?'<p class="muted sm">Projeto: <strong>'+esc(cfg.projectId)+'</strong></p>':'';
+  main.innerHTML='<div class="page">'+
+    '<div class="csec"><div class="csec-ttl">🔥 Firebase Realtime Database</div>'+
+    '<div style="padding:.4rem 0">'+fbStatus+'</div>'+projectHint+
+    '<p class="muted sm" style="margin-top:.5rem;margin-bottom:.75rem">Cole abaixo o JSON do seu Firebase (console.firebase.google.com → Configurações do projeto → Seus apps → SDK):</p>'+
+    '<textarea class="fc" id="fb-json" rows="9" placeholder="{\n  &quot;apiKey&quot;: &quot;AIza...&quot;,\n  &quot;databaseURL&quot;: &quot;https://...firebaseio.com&quot;,\n  &quot;projectId&quot;: &quot;...&quot;,\n  ...\n}">'+esc(cfg.projectId?JSON.stringify(cfg,null,2):'')+'</textarea>'+
+    '<div style="display:flex;gap:.75rem;margin-top:.75rem">'+
+    '<button class="btn btn-p" onclick="window.saveFbCfg()" style="flex:1">💾 Salvar e Conectar</button>'+
+    '<button class="btn btn-n" onclick="window.clearFbCfg()">🗑️ Limpar</button>'+
+    '</div>'+
+    '<div id="fb-status" class="mt sm"></div>'+
+    '<div style="background:#e8f5e9;border-radius:var(--rs);padding:.75rem;margin-top:.75rem;font-size:.8rem;color:#2e7d32">'+
+    '<strong>ℹ️ Segurança:</strong> o JSON fica só no seu celular (localStorage). Não fica exposto em nenhum código público.'+
     '</div></div>'+
-    '<div class="csec"><div class="csec-ttl">📊 Dados locais ('+n+' pedido'+(n!==1?'s':'')+' em cache)</div>'+
+    '<div class="csec"><div class="csec-ttl">📜 Regras do Firebase (1x só)</div>'+
+    '<p class="muted sm" style="margin-bottom:.5rem">No Firebase Console → Realtime Database → Regras:</p>'+
+    '<code style="background:#f8fafc;border:1px solid var(--border);border-radius:var(--rs);padding:.75rem;display:block;font-size:.75rem;white-space:pre">{
+  "rules": {
+    ".read": true,
+    ".write": true
+  }
+}</code>'+
+    '<p class="muted sm" style="margin-top:.5rem">Para mais segurança: restrinja o apiKey no <a href="https://console.cloud.google.com" target="_blank">Google Cloud Console</a> para aceitar só de speedboymotoboy.github.io.</p>'+
+    '</div>'+
+    '<div class="csec"><div class="csec-ttl">📊 Dados ('+n+' pedido'+(n!==1?'s':'')+' em cache)</div>'+
     '<div style="display:flex;gap:.75rem">'+
     '<button class="btn btn-n" style="flex:1" onclick="window.exportData()">⬇️ Exportar JSON</button>'+
     '<button class="btn btn-d" style="flex:1" onclick="window.confirmClear()">🗑️ Limpar cache</button>'+
     '</div></div></div>';
 }
+
+window.saveFbCfg=function(){
+  var el=g('fb-json');var txt=el?el.value.trim():'';
+  if(!txt){toast('Cole o JSON do Firebase','err');return;}
+  try{
+    var cfg=JSON.parse(txt);
+    if(!cfg.databaseURL){toast('JSON precisa ter o campo databaseURL','err');return;}
+    saveFbConfig(cfg);
+    initFirebase();
+    var st=g('fb-status');
+    if(st)st.innerHTML='<span style="color:var(--muted)">Conectando...</span>';
+    setTimeout(function(){
+      var st2=g('fb-status');
+      if(st2)st2.innerHTML=fbDb?'<span style="color:var(--s-fin)">✅ Conectado!</span>':'<span style="color:var(--red)">❌ Falha — verifique as Regras do Firebase</span>';
+    },2000);
+  }catch(e){
+    toast('JSON inválido: '+e.message,'err');
+  }
+};
+window.clearFbCfg=function(){
+  localStorage.removeItem(FB_KEY);
+  fbDb=null;
+  toast('Configuração removida','ok');
+  pgConfig(g('app-main'));
+};
 
 // ── FORM ACTIONS ─────────────────────────────────────────────────────────────
 function formData(){
@@ -508,9 +490,9 @@ window.saveEditar=function(id){
   updatePedido(id,d);toast('Atualizado! ✅','ok');location.hash='#/pedido/'+id;
 };
 window.advance=function(id,nxt){updatePedido(id,{status:nxt});toast(SM[nxt].icon+' '+SM[nxt].label,'ok');go();};
-window.confirmDel=function(id){modal('<div class="modal"><div class="modal-ttl">⚠️ Excluir pedido?</div><div class="modal-txt">Essa ação não pode ser desfeita.</div><div class="modal-acts"><button class="btn btn-n" style="flex:1" onclick="window.closeModal()">Cancelar</button><button class="btn btn-d" style="flex:1" onclick="window.doDel(\''+id+'\')" >Excluir</button></div></div>');}
+window.confirmDel=function(id){modal('<div class="modal"><div class="modal-ttl">⚠️ Excluir pedido?</div><div class="modal-txt">Essa ação não pode ser desfeita.</div><div class="modal-acts"><button class="btn btn-n" style="flex:1" onclick="window.closeModal()">Cancelar</button><button class="btn btn-d" style="flex:1" onclick="window.doDel(\''+id+'\')" >Excluir</button></div></div>');};
 window.doDel=function(id){window.closeModal();deletePedido(id);toast('Excluído','ok');location.hash='#/pedidos';};
-window.confirmClear=function(){modal('<div class="modal"><div class="modal-ttl">⚠️ Limpar cache local?</div><div class="modal-txt">Dados do Firebase permanecem. Serão baixados novamente ao reabrir.</div><div class="modal-acts"><button class="btn btn-n" style="flex:1" onclick="window.closeModal()">Cancelar</button><button class="btn btn-d" style="flex:1" onclick="window.doClear()">Limpar</button></div></div>')};
+window.confirmClear=function(){modal('<div class="modal"><div class="modal-ttl">⚠️ Limpar cache local?</div><div class="modal-txt">Dados do Firebase permanecem. Serão baixados novamente ao reabrir.</div><div class="modal-acts"><button class="btn btn-n" style="flex:1" onclick="window.closeModal()">Cancelar</button><button class="btn btn-d" style="flex:1" onclick="window.doClear()">Limpar</button></div></div>');};
 window.doClear=function(){window.closeModal();ST.pedidos=[];saveData();toast('Cache limpo','ok');location.hash='#/';};
 window.doSearch=function(v){ST.fSearch=v;renderList();};
 window.fSt=function(v){ST.fStatus=v;pgPedidos(g('app-main'));};
