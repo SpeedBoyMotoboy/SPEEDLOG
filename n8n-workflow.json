@@ -1,19 +1,18 @@
 {
-  "name": "SpeedLog - WhatsApp para Supabase",
+  "name": "SpeedLog — WhatsApp → Firebase",
   "nodes": [
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "whatsapp-speedlog",
-        "responseMode": "responseNode",
+        "path": "speedlog-whatsapp",
         "options": {}
       },
-      "id": "webhook-1",
-      "name": "Webhook Evolution API",
+      "id": "node-webhook",
+      "name": "Webhook (Evolution API)",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [240, 300],
-      "notes": "Configure no Evolution API: POST para https://SEU-N8N/webhook/whatsapp-speedlog"
+      "webhookId": "speedlog-webhook"
     },
     {
       "parameters": {
@@ -21,98 +20,165 @@
           "options": { "caseSensitive": false },
           "conditions": [
             {
-              "id": "has-pdf",
-              "leftValue": "={{ $json.message.mediaType }}",
-              "rightValue": "pdf",
-              "operator": { "type": "string", "operation": "contains" }
+              "id": "has-doc",
+              "leftValue": "={{ $json.data.messageType }}",
+              "rightValue": "documentMessage",
+              "operator": { "type": "string", "operation": "equals" }
             }
-          ]
+          ],
+          "combinator": "and"
         }
       },
-      "id": "if-1",
-      "name": "Tem PDF?",
+      "id": "node-if-pdf",
+      "name": "É PDF/Documento?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [460, 300]
     },
     {
       "parameters": {
-        "operation": "text",
-        "binaryPropertyName": "={{ $json.message.mediaUrl }}"
+        "method": "POST",
+        "url": "=https://{{ $vars.EVOLUTION_URL }}/chat/getBase64FromMediaMessage/{{ $vars.INSTANCE_NAME }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $vars.EVOLUTION_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "message", "value": "={{ $json.data.message }}" }
+          ]
+        },
+        "options": {}
       },
-      "id": "extract-1",
-      "name": "Extrair Texto do PDF",
-      "type": "n8n-nodes-base.extractFromFile",
-      "typeVersion": 1,
-      "position": [680, 180],
-      "notes": "Extrai texto do PDF da etiqueta ML"
+      "id": "node-get-pdf",
+      "name": "Baixar PDF (Evolution)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 200]
     },
     {
       "parameters": {
-        "jsCode": "// Recebe texto do PDF ou mensagem de texto\nconst text = $input.first().json.text || $input.first().json.body || $input.first().json.message?.conversation || '';\n\nfunction extract(patterns, text) {\n  for (const p of patterns) {\n    const m = text.match(p);\n    if (m && m[1]) return m[1].trim();\n  }\n  return null;\n}\n\nconst result = {\n  nome_cliente: extract([/(?:cliente|comprador|destinat[aá]rio|nome)[:\\s]*([^\\n]{3,60})/i], text),\n  numero_venda: extract([/(?:venda|pedido|n[uú]mero|nº|#)[:\\s]*([A-Z0-9\\-]{5,})/i, /\\b([0-9]{8,20})\\b/], text),\n  etiqueta_ml: extract([/(?:etiqueta|label)[:\\s]*([A-Z0-9\\-]+)/i, /\\b((?:ML|BR)[0-9A-Z]{8,})\\b/i], text),\n  codigo_produto: extract([/(?:c[oó]d|sku|ref)[:\\s]*([A-Z0-9\\-_]{3,})/i], text),\n  nome_produto: extract([/(?:produto|item|descri[cç][aã]o)[:\\s]*([^\\n]{3,60})/i], text),\n  marca: extract([/(?:marca|brand)[:\\s]*([^\\n]{2,30})/i], text),\n  quantidade: parseInt(extract([/(?:quantidade|qtd)[:\\s]*(\\d+)/i], text)) || 1,\n  status: 'recebido'\n};\n\nreturn [{ json: result }];"
+        "operation": "pdf",
+        "binaryPropertyName": "data"
       },
-      "id": "code-1",
-      "name": "Parsear Dados",
+      "id": "node-extract-pdf",
+      "name": "Extrair Texto do PDF",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parseia texto extraído do PDF ou texto direto do WhatsApp\nconst txt = $input.first().json.text || $input.first().json.body || '';\n\nconst get = (patterns, t) => {\n  for (const p of patterns) {\n    const m = t.match(p);\n    if (m && m[1]) return m[1].trim();\n  }\n  return null;\n};\n\nconst nome_cliente   = get([/CLIENTE[:\\s]+([^\\n]+)/i, /nome[:\\s]+([^\\n]+)/i], txt);\nconst numero_venda   = get([/VENDA[:\\s]+([^\\n]+)/i, /pedido[:\\s]+([^\\n]+)/i], txt);\nconst codigo_produto = get([/C[ÓO]DIGO[:\\s]+([^\\n]+)/i, /SKU[:\\s]+([^\\n]+)/i], txt);\nconst nome_produto   = get([/PRODUTO[:\\s]+([^\\n]+)/i, /item[:\\s]+([^\\n]+)/i], txt);\nconst marca          = get([/MARCA[:\\s]+([^\\n]+)/i], txt);\nconst quantidade     = get([/QUANTIDADE[:\\s]+([^\\n]+)/i, /QTD[:\\s]+([^\\n]+)/i], txt);\nconst etiqueta_ml    = get([/etiqueta[:\\s]+([^\\n]+)/i, /\\b((?:ML|BR)[0-9A-Z]{8,})\\b/i], txt);\n\nconst dateMatch = txt.match(/(?:prazo|despachar?(?:\\s+em)?|até)[:\\s]*(\\d{1,2}[\\/\\-]\\d{1,2}(?:[\\/\\-]\\d{2,4})?)/i);\nlet data_despacho = null;\nif (dateMatch) {\n  const parts = dateMatch[1].split(/[\\/\\-]/);\n  if (parts.length >= 2) {\n    const year = parts[2] ? (parts[2].length === 2 ? '20' + parts[2] : parts[2]) : new Date().getFullYear();\n    data_despacho = `${year}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;\n  }\n}\n\nconst id = `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;\n\nreturn [{\n  json: {\n    id,\n    created_at: new Date().toISOString(),\n    updated_at: new Date().toISOString(),\n    nome_cliente: nome_cliente || 'Não identificado',\n    numero_venda,\n    codigo_produto: codigo_produto ? codigo_produto.toUpperCase() : null,\n    nome_produto,\n    marca,\n    quantidade,\n    etiqueta_ml,\n    data_despacho,\n    status: 'recebido',\n    observacoes: null,\n    galpao: null\n  }\n}];"
+      },
+      "id": "node-parse",
+      "name": "Parsear Campos",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [900, 300]
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $vars.FIREBASE_DATABASE_URL }}/pedidos/{{ $json.id }}.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "node-firebase",
+      "name": "Salvar no Firebase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 300]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://SEU-PROJETO.supabase.co/rest/v1/pedidos",
+        "url": "=https://{{ $vars.EVOLUTION_URL }}/message/sendText/{{ $vars.INSTANCE_NAME }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "=SUA-ANON-KEY" },
-            { "name": "Authorization", "value": "=Bearer SUA-ANON-KEY" },
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "Prefer", "value": "return=representation" }
+            { "name": "apikey", "value": "={{ $vars.EVOLUTION_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
           ]
         },
         "sendBody": true,
-        "contentType": "json",
-        "body": "={{ $json }}"
+        "specifyBody": "json",
+        "jsonBody": "={ \"number\": \"{{ $('Webhook (Evolution API)').first().json.sender }}\", \"text\": \"✅ Pedido recebido!\\n\\n📦 *{{ $json.nome_produto || 'Produto' }}*\\n🏷 Venda: {{ $json.numero_venda || '-' }}\\n👤 Cliente: {{ $json.nome_cliente || '-' }}\\n🔑 Código: {{ $json.codigo_produto || '-' }}\\n\\nAcompanhe em: speedboymotoboy.github.io/speedlog\" }",
+        "options": {}
       },
-      "id": "http-1",
-      "name": "Salvar no Supabase",
+      "id": "node-reply",
+      "name": "Responder no WhatsApp",
       "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [1120, 300],
-      "notes": "Substitua SEU-PROJETO e SUA-ANON-KEY pelas credenciais do seu Supabase"
+      "typeVersion": 4.2,
+      "position": [1560, 300]
     },
     {
       "parameters": {
-        "respondWith": "json",
-        "responseBody": "={ \"ok\": true }"
+        "jsCode": "const txt = $input.first().json.data?.message?.conversation || $input.first().json.data?.message?.extendedTextMessage?.text || '';\nreturn [{ json: { text: txt, body: txt } }];"
       },
-      "id": "respond-1",
-      "name": "Responder OK",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
-      "position": [1340, 300]
+      "id": "node-parse-text",
+      "name": "Preparar Texto",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 400]
     }
   ],
   "connections": {
-    "Webhook Evolution API": { "main": [[{ "node": "Tem PDF?", "type": "main", "index": 0 }]] },
-    "Tem PDF?": {
+    "Webhook (Evolution API)": {
+      "main": [[{ "node": "É PDF/Documento?", "type": "main", "index": 0 }]]
+    },
+    "É PDF/Documento?": {
       "main": [
-        [{ "node": "Extrair Texto do PDF", "type": "main", "index": 0 }],
-        [{ "node": "Parsear Dados", "type": "main", "index": 0 }]
+        [{ "node": "Baixar PDF (Evolution)", "type": "main", "index": 0 }],
+        [{ "node": "Preparar Texto", "type": "main", "index": 0 }]
       ]
     },
-    "Extrair Texto do PDF": { "main": [[{ "node": "Parsear Dados", "type": "main", "index": 0 }]] },
-    "Parsear Dados": { "main": [[{ "node": "Salvar no Supabase", "type": "main", "index": 0 }]] },
-    "Salvar no Supabase": { "main": [[{ "node": "Responder OK", "type": "main", "index": 0 }]] }
+    "Baixar PDF (Evolution)": {
+      "main": [[{ "node": "Extrair Texto do PDF", "type": "main", "index": 0 }]]
+    },
+    "Extrair Texto do PDF": {
+      "main": [[{ "node": "Parsear Campos", "type": "main", "index": 0 }]]
+    },
+    "Preparar Texto": {
+      "main": [[{ "node": "Parsear Campos", "type": "main", "index": 0 }]]
+    },
+    "Parsear Campos": {
+      "main": [[{ "node": "Salvar no Firebase", "type": "main", "index": 0 }]]
+    },
+    "Salvar no Firebase": {
+      "main": [[{ "node": "Responder no WhatsApp", "type": "main", "index": 0 }]]
+    }
   },
+  "active": false,
   "settings": { "executionOrder": "v1" },
-  "_instructions": {
-    "pt": [
-      "1. Importe este arquivo no n8n (Workflows > Import)",
-      "2. No node 'Salvar no Supabase': substitua SEU-PROJETO pela URL do Supabase e SUA-ANON-KEY pela chave anon",
-      "3. Configure o Evolution API para enviar webhooks para: https://SEU-N8N/webhook/whatsapp-speedlog",
-      "4. Ative o workflow no n8n",
-      "5. Teste enviando uma mensagem com dados de pedido para o WhatsApp conectado"
+  "versionId": "speedlog-v2",
+  "meta": { "templateCredsSetupCompleted": false, "instanceId": "speedlog" },
+  "tags": [],
+  "_readme": {
+    "variables": {
+      "EVOLUTION_URL": "URL da sua instância Evolution API (ex: https://evo.meuservidor.com)",
+      "EVOLUTION_API_KEY": "API key da Evolution API (configurada no painel)",
+      "INSTANCE_NAME": "Nome da instância criada no Evolution API (ex: speedboy)",
+      "FIREBASE_DATABASE_URL": "URL do Realtime Database (ex: https://speedboy-3c1c6-default-rtdb.firebaseio.com)"
+    },
+    "setup_steps": [
+      "1. Importe este arquivo no n8n (Workflows → Import from File)",
+      "2. Configure as variáveis de ambiente no n8n (Settings → Variables) com os valores acima",
+      "3. No painel do Evolution API, vá em Webhooks e aponte para a URL do webhook n8n",
+      "4. Ative o workflow clicando em 'Active' no canto superior direito",
+      "5. Envie uma mensagem de teste no WhatsApp — o pedido deve aparecer no SpeedLog em segundos"
     ]
   }
 }
