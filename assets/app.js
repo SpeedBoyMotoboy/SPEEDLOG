@@ -178,7 +178,7 @@ function onCodeFound(code){
       if(p.galpao&&GALPOES[p.galpao])details+='<div class="scan-detail-row"><span class="dl">Galpão</span><span class="dv bold">🏭 '+esc(GALPOES[p.galpao])+'</span></div>';
       if(p.data_despacho)details+='<div class="scan-detail-row"><span class="dl">Prazo</span><span class="dv" style="color:'+(isAt?'var(--red)':ps==='hoje'?'#856404':'inherit')+';">'+fmtDate(p.data_despacho)+(isAt?' ⏰ ATRASADO':ps==='hoje'?' ⚠️ HOJE':'')+'</span></div>';
       var actionBtn='';
-      if(s.next){actionBtn='<button class="btn btn-p btn-bl" style="margin-top:.75rem" onclick="window.advanceScan(\''+p.id+'\',\''+s.next+'\')">'+ SM[s.next].icon+' '+s.nxt+'</button>';}
+      if(s.next){actionBtn='<button class="btn btn-p btn-bl" style="margin-top:.75rem" onclick="window.advanceScan(\''+p.id+'\',\''+s.next+'\')">'+SM[s.next].icon+' '+s.nxt+'</button>';}
       cards+='<div class="scan-match-card '+(isAt?'atrasado':p.status)+'"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem"><span class="badge '+p.status+'">'+s.icon+' '+s.label+'</span><a href="#/pedido/'+p.id+'" style="font-size:.78rem;color:var(--blue);font-weight:600">Ver detalhes →</a></div>'+details+actionBtn+'</div>';
     });
     r.innerHTML='<div class="scan-result">'+topBar+'<div class="scan-matches">'+cards+'</div></div>';
@@ -238,7 +238,7 @@ function go(){
       if(back){back.classList.remove('hidden');back.onclick=function(){history.back();};}
       if(acts)acts.innerHTML=
         '<a href="#/editar/'+id+'" class="btn-icon" title="Editar"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path stroke-linecap="round" stroke-linejoin="round" d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></a>'+
-        '<button class="btn-icon" onclick="window.confirmDel(\''+id+'\')" ><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>';
+        '<button class="btn-icon" onclick="window.confirmDel(\''+id+'\')"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>';
       pgDetalhe(main,id);
     }
     else if(page==='bipar'){if(ttl)ttl.textContent='Bipar Produto';pgBipar(main);}
@@ -292,7 +292,7 @@ function sCard(cls,ico,num,lbl){return '<div class="stat-card '+cls+'"><span cla
 // ── PEDIDOS ─────────────────────────────────────────────────────────────────
 function pgPedidos(main){
   var chips='<span class="chip '+(!ST.fStatus?'on':'')+' " onclick="window.fSt(null)">Todos</span>';
-  SO.forEach(function(s){chips+='<span class="chip '+(ST.fStatus===s?'on '+s:'')+' " onclick="window.fSt(\''+s+'\')">'+ SM[s].icon+' '+SM[s].label+'</span>';});
+  SO.forEach(function(s){chips+='<span class="chip '+(ST.fStatus===s?'on '+s:'')+' " onclick="window.fSt(\''+s+'\')">'+SM[s].icon+' '+SM[s].label+'</span>';});
   var gchips='<span class="chip '+(!ST.fGalpao?'on':'')+' " onclick="window.fGal(null)">Todos</span>';
   Object.keys(GALPOES).forEach(function(k){gchips+='<span class="chip '+(ST.fGalpao===k?'on':'')+' " onclick="window.fGal(\''+k+'\')">'+ GALPOES[k]+'</span>';});
   main.innerHTML='<div class="page"><div class="search-wrap">'+
@@ -395,7 +395,7 @@ function pgDetalhe(main,id){
   var p=getPedido(id);
   if(!p){main.innerHTML='<div class="page"><div class="empty"><span class="empty-ico">❌</span><h3>Pedido não encontrado</h3></div></div>';return;}
   var s=SM[p.status]||SM.recebido;var ci=SO.indexOf(p.status);var ps=prazoStatus(p.data_despacho);
-  var dupes=p.numero_venda?ST.pedidos.filter(function(x){return x.numero_venda===p.numero_venda&&x.id!==p.id;}):[]
+  var dupes=p.numero_venda?ST.pedidos.filter(function(x){return x.numero_venda===p.numero_venda&&x.id!==p.id;}):[];
   var h='<div class="page">';
   if(ps==='atrasado'&&p.status!=='finalizado')h+='<div style="background:#fef2f2;border:1.5px solid #fecaca;border-radius:var(--r);padding:.75rem 1rem;color:#b91c1c;font-weight:700">⏰ PRAZO VENCIDO — '+fmtDate(p.data_despacho)+'</div>';
   if(ps==='hoje'&&p.status!=='finalizado')h+='<div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:var(--r);padding:.75rem 1rem;color:#856404;font-weight:700">⚠️ DESPACHAR HOJE!</div>';
@@ -438,7 +438,7 @@ function buildForm(p){
   if(!p)p={};
   var opts='';SO.forEach(function(s){opts+='<option value="'+s+'"'+(p.status===s?' selected':'')+'>'+SM[s].label+'</option>';});
   var gchips='';Object.keys(GALPOES).forEach(function(k){gchips+='<span class="chip'+(p.galpao===k?' on':'')+' galpao-chip" onclick="window.pickGalpao(\''+k+'\')" data-gv="'+k+'">'+GALPOES[k]+'</span>';});
-  return '<div class="fg"><label class="fl">Cliente *</label><input class="fc" id="fn" type="text" placeholder="Ex: Amarildo da Conceição" value="'+esc(p.nome_cliente||'')+'"></div>'+
+  return '<div class="fg"><label class="fl">Cliente *</label><input class="fc" id="fn" type="text" placeholder="Ex: Amarildo da Conceição" value="'+esc(p.nome_cliente||'')+'">'+'</div>'+
     '<div class="g2"><div class="fg"><label class="fl">Nº Venda ML</label><input class="fc" id="fv" type="text" placeholder="2000001296..." value="'+esc(p.numero_venda||'')+'"></div>'+
     '<div class="fg"><label class="fl">Etiqueta ML</label><input class="fc" id="fe" type="text" placeholder="BR0001..." value="'+esc(p.etiqueta_ml||'')+'"></div></div>'+
     '<div class="g2"><div class="fg"><label class="fl">Cód. Produto 🔑</label><input class="fc" id="fc2" type="text" placeholder="Ex: KTB759" style="text-transform:uppercase" value="'+esc(p.codigo_produto||'')+'"></div>'+
@@ -474,12 +474,7 @@ function pgConfig(main){
     '</div></div>'+
     '<div class="csec"><div class="csec-ttl">📜 Regras do Firebase (1x só)</div>'+
     '<p class="muted sm" style="margin-bottom:.5rem">No Firebase Console → Realtime Database → Regras:</p>'+
-    '<code style="background:#f8fafc;border:1px solid var(--border);border-radius:var(--rs);padding:.75rem;display:block;font-size:.75rem;white-space:pre">{
-  &quot;rules&quot;: {
-    &quot;.read&quot;: true,
-    &quot;.write&quot;: true
-  }
-}</code>'+
+    '<code style="background:#f8fafc;border:1px solid var(--border);border-radius:var(--rs);padding:.75rem;display:block;font-size:.75rem;white-space:pre">{\n  &quot;rules&quot;: {\n    &quot;.read&quot;: true,\n    &quot;.write&quot;: true\n  }\n}</code>'+
     '<p class="muted sm" style="margin-top:.5rem">Para mais segurança: restrinja o apiKey no Google Cloud Console para aceitar só de speedboymotoboy.github.io.</p>'+
     '</div>'+
     '<div class="csec"><div class="csec-ttl">📊 Dados ('+n+' pedido'+(n!==1?'s':'')+' em cache)</div>'+
