@@ -1,4 +1,4 @@
-// SpeedLog v7 — Firebase + Galpão
+// SpeedLog v8 — OCR Pack ID
 var DATA_KEY = 'sl_data';
 var FB_KEY   = 'sl_fb';
 
@@ -28,13 +28,9 @@ function saveData(){try{localStorage.setItem(DATA_KEY,JSON.stringify(ST.pedidos)
 function getFbConfig(){try{return JSON.parse(localStorage.getItem(FB_KEY)||'null');}catch(e){return null;}}
 function saveFbConfig(c){localStorage.setItem(FB_KEY,JSON.stringify(c));}
 
-// ── FIREBASE ────────────────────────────────────────────────────────────────
 function initFirebase(){
   var cfg = getFbConfig();
-  if(!cfg || !cfg.databaseURL){
-    fbDb = null;
-    return;
-  }
+  if(!cfg || !cfg.databaseURL){ fbDb = null; return; }
   try{
     if(!window.firebase){toast('Firebase SDK não carregou','err');return;}
     if(firebase.apps.length) firebase.apps[0].delete().catch(function(){});
@@ -81,7 +77,6 @@ function updateAlertBadge(){
   }catch(e){}
 }
 
-// ── CRUD ────────────────────────────────────────────────────────────────────
 function createPedido(data){
   var now=new Date().toISOString();
   var p={}; for(var k in data)p[k]=data[k];
@@ -106,7 +101,6 @@ function deletePedido(id){
   saveData(); delFB(id);
 }
 
-// ── ALERTS ──────────────────────────────────────────────────────────────────
 function getAlerts(){
   var ativos=ST.pedidos.filter(function(p){return p.status!=='finalizado';});
   var atrasados=ativos.filter(function(p){return prazoStatus(p.data_despacho)==='atrasado';});
@@ -119,7 +113,6 @@ function getAlerts(){
   return{atrasados:atrasados,hoje:hojeL,duplicados:dups,parados:parados,total:atrasados.length+hojeL.length+dups.length+parados.length};
 }
 
-// ── SCANNER ─────────────────────────────────────────────────────────────────
 function stopScanner(){if(qrScanner){try{qrScanner.stop().catch(function(){});}catch(e){}qrScanner=null;}}
 function startScanner(){
   stopScanner();
@@ -159,7 +152,7 @@ function onCodeFound(code){
   if(matches.length===0){
     var campo='fc2';var tipoLabel='código de produto';
     if(/^(ML|BR)[A-Z0-9]{5,}$/i.test(codeT)){campo='fe';tipoLabel='etiqueta Mercado Livre';}
-    else if(/^\d{10,}$/.test(codeT)){campo='fv';tipoLabel='número de venda';}
+    else if(/^\d{10,}$/.test(codeT)){campo='fv';tipoLabel='número de venda / Pack ID';}
     PREFILL={campo:campo,valor:campo==='fc2'?codeU:codeT};
     var noPedidos=ST.pedidos.length===0;
     var msg=noPedidos
@@ -195,7 +188,6 @@ window.advanceScan=function(id,nxt){
   if(p)onCodeFound(p.codigo_produto||p.etiqueta_ml||p.numero_venda||'');
 };
 
-// ── ROUTER ──────────────────────────────────────────────────────────────────
 function routeParse(){
   var h=location.hash.slice(1)||'/';
   var p=h.split('/').filter(function(x){return x;});
@@ -252,7 +244,6 @@ function go(){
   }
 }
 
-// ── HOME ────────────────────────────────────────────────────────────────────
 function renderHome(main){
   var c={recebido:0,separacao:0,expedicao:0,finalizado:0};
   ST.pedidos.forEach(function(p){if(c[p.status]!==undefined)c[p.status]++;});
@@ -292,7 +283,6 @@ function renderHome(main){
 }
 function sCard(cls,ico,num,lbl){return '<div class="stat-card '+cls+'"><span class="stat-ico">'+ico+'</span><span class="stat-num">'+num+'</span><span class="stat-lbl">'+lbl+'</span></div>';}
 
-// ── PEDIDOS ─────────────────────────────────────────────────────────────────
 function pgPedidos(main){
   var chips='<span class="chip '+(!ST.fStatus?'on':'')+' " onclick="window.fSt(null)">Todos</span>';
   SO.forEach(function(s){chips+='<span class="chip '+(ST.fStatus===s?'on '+s:'')+' " onclick="window.fSt(\''+s+'\')">'+ SM[s].icon+' '+SM[s].label+'</span>';});
@@ -334,20 +324,52 @@ function orderCard(p){
   return '<a href="#/pedido/'+p.id+'" class="order-card '+(isAt?'atrasado':p.status)+'"><div class="oc-hdr"><span class="oc-ttl">'+esc(p.nome_cliente||'Cliente não informado')+'</span><span class="badge '+p.status+'">'+s.icon+' '+s.label+'</span></div><div class="oc-meta">'+meta+'</div></a>';
 }
 
-// ── BIPAR ────────────────────────────────────────────────────────────────────
 function pgBipar(main){
+  var hasOCR='TextDetector' in window;
   main.innerHTML='<div class="page"><div class="scan-area"><div id="reader"></div><div class="scan-laser"></div></div>'+
-    '<div class="scan-hint">📷 Bipe o código do produto para encontrar a etiqueta ML</div>'+
+    '<div class="scan-hint">📷 Bipe o código de barras — ou use OCR para Pack ID sem código de barras</div>'+
     '<div id="scan-status"></div><div id="scan-result"></div>'+
+    (hasOCR
+      ? '<button class="btn ocr-btn btn-bl" id="btn-ocr" onclick="window.captureOCR()">📸 Ler Pack ID da etiqueta (OCR)</button>'
+      : '<div style="background:#fffbeb;border-radius:var(--rs);padding:.75rem;font-size:.8rem;color:#856404">⚠️ OCR não disponível neste navegador (use Chrome). Digite o Pack ID abaixo.</div>'
+    )+
     '<div style="background:var(--card);border-radius:var(--r);padding:1rem;box-shadow:var(--sh)">'+
-    '<div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:.75rem">Ou digite o código manualmente</div>'+
-    '<div style="display:flex;gap:.5rem"><input class="fc" id="manual-code" type="text" placeholder="Ex: KTB759" style="flex:1;text-transform:uppercase">'+
+    '<div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:.75rem">Ou digite o código / Pack ID manualmente</div>'+
+    '<div style="display:flex;gap:.5rem"><input class="fc" id="manual-code" type="text" placeholder="Pack ID, KTB759, nº venda..." style="flex:1">'+
     '<button class="btn btn-p" onclick="window.manualCode()">Buscar</button></div></div></div>';
   setTimeout(startScanner,200);
 }
-window.manualCode=function(){var inp=g('manual-code');var code=inp?inp.value.trim().toUpperCase():'';if(!code){toast('Digite um código','err');return;}stopScanner();onCodeFound(code);};
+window.manualCode=function(){
+  var inp=g('manual-code');var code=inp?inp.value.trim():'';
+  if(!code){toast('Digite um código','err');return;}
+  stopScanner();onCodeFound(code);
+};
+window.captureOCR=async function(){
+  var video=document.querySelector('#reader video');
+  if(!video){toast('Câmera não iniciou — aguarde 2 segundos e tente novamente','err');return;}
+  var btn=g('btn-ocr');
+  if(btn){btn.textContent='⏳ Lendo texto...';btn.disabled=true;}
+  try{
+    var td=new TextDetector();
+    var results=await td.detect(video);
+    var all=results.map(function(r){return r.rawValue;}).join('\n');
+    var m=all.match(/Pack\s*ID[:\s]*(\d{8,})/i)
+        ||all.match(/\b(2\d{9,15})\b/)
+        ||all.match(/\b(\d{12,16})\b/);
+    if(m){
+      toast('Pack ID: '+m[1],'ok');
+      stopScanner();
+      onCodeFound(m[1]);
+    }else{
+      toast('Número não encontrado — centralize o Pack ID e tente novamente','warn');
+    }
+  }catch(e){
+    toast('OCR: '+e.message,'err');
+  }finally{
+    if(btn){btn.textContent='📸 Ler Pack ID da etiqueta (OCR)';btn.disabled=false;}
+  }
+};
 
-// ── ALERTAS ──────────────────────────────────────────────────────────────────
 function pgAlertas(main){
   var al=getAlerts();
   function sec(title,cls,items){if(!items.length)return'';var h='<div class="alert-group"><div class="alert-group-ttl '+cls+'">'+title+' <span style="background:currentColor;color:#fff;border-radius:20px;padding:1px 8px;font-size:.65rem">'+items.length+'</span></div>';items.forEach(function(p){h+=orderCard(p);});return h+'</div>';}
@@ -358,7 +380,6 @@ function pgAlertas(main){
   main.innerHTML=h+'</div>';
 }
 
-// ── DETALHE ──────────────────────────────────────────────────────────────────
 function pgDetalhe(main,id){
   var p=getPedido(id);
   if(!p){main.innerHTML='<div class="page"><div class="empty"><span class="empty-ico">❌</span><h3>Pedido não encontrado</h3></div></div>';return;}
@@ -387,7 +408,6 @@ function pgDetalhe(main,id){
 }
 function dfield(l,v){if(v==null||v==='')return'';return'<div class="df"><span class="dl">'+l+'</span><span class="dv">'+esc(String(v))+'</span></div>';}
 
-// ── NOVO / EDITAR ───────────────────────────────────────────────────────────────
 function pgNovo(main){
   main.innerHTML='<div class="page"><div class="wbox"><div class="wbox-hdr"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="#25D366"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg> Colar texto do WhatsApp</div>'+
     '<p class="muted sm" style="margin-bottom:.5rem">Cole a mensagem com VENDA / CLIENTE / PRODUTO / CÓDIGO / QUANTIDADE</p>'+
@@ -419,7 +439,6 @@ function buildForm(p){
     '<div class="fg"><label class="fl">Observações</label><textarea class="fc" id="fo" placeholder="Notas...">'+esc(p.observacoes||'')+'</textarea></div>';
 }
 
-// ── CONFIG ───────────────────────────────────────────────────────────────────
 function pgConfig(main){
   var n=ST.pedidos.length;
   var cfg=getFbConfig()||{};
@@ -430,7 +449,7 @@ function pgConfig(main){
   main.innerHTML='<div class="page">'+
     '<div class="csec"><div class="csec-ttl">🔥 Firebase Realtime Database</div>'+
     '<div style="padding:.4rem 0">'+fbStatus+'</div>'+projectHint+
-    '<p class="muted sm" style="margin-top:.5rem;margin-bottom:.75rem">Cole abaixo o JSON do seu Firebase (console.firebase.google.com → Configurações do projeto → Seus apps → SDK):</p>'+
+    '<p class="muted sm" style="margin-top:.5rem;margin-bottom:.75rem">Cole abaixo o JSON do seu Firebase:</p>'+
     '<textarea class="fc" id="fb-json" rows="9" placeholder="{\n  &quot;apiKey&quot;: &quot;AIza...&quot;,\n  &quot;databaseURL&quot;: &quot;https://...firebaseio.com&quot;,\n  &quot;projectId&quot;: &quot;...&quot;,\n  ...\n}">'+esc(cfg.projectId?JSON.stringify(cfg,null,2):'')+'</textarea>'+
     '<div style="display:flex;gap:.75rem;margin-top:.75rem">'+
     '<button class="btn btn-p" onclick="window.saveFbCfg()" style="flex:1">💾 Salvar e Conectar</button>'+
@@ -442,9 +461,12 @@ function pgConfig(main){
     '</div></div>'+
     '<div class="csec"><div class="csec-ttl">📜 Regras do Firebase (1x só)</div>'+
     '<p class="muted sm" style="margin-bottom:.5rem">No Firebase Console → Realtime Database → Regras:</p>'+
-    '<code style="background:#f8fafc;border:1px solid var(--border);border-radius:var(--rs);padding:.75rem;display:block;font-size:.75rem;white-space:pre">{\n  &quot;rules&quot;: {\n    &quot;.read&quot;: true,\n    &quot;.write&quot;: true\n  }\n}</code>'+
-    '<p class="muted sm" style="margin-top:.5rem">Para mais segurança: restrinja o apiKey no Google Cloud Console para aceitar só de speedboymotoboy.github.io.</p>'+
-    '</div>'+
+    '<code style="background:#f8fafc;border:1px solid var(--border);border-radius:var(--rs);padding:.75rem;display:block;font-size:.75rem;white-space:pre">{
+  &quot;rules&quot;: {
+    &quot;.read&quot;: true,
+    &quot;.write&quot;: true
+  }
+}</code></div>'+
     '<div class="csec"><div class="csec-ttl">📊 Dados ('+n+' pedido'+(n!==1?'s':'')+' em cache)</div>'+
     '<div style="display:flex;gap:.75rem">'+
     '<button class="btn btn-n" style="flex:1" onclick="window.exportData()">⬇️ Exportar JSON</button>'+
@@ -477,7 +499,6 @@ window.clearFbCfg=function(){
   pgConfig(g('app-main'));
 };
 
-// ── FORM ACTIONS ─────────────────────────────────────────────────────────────
 function formData(){
   function v(id){var el=g(id);return el&&el.value.trim()?el.value.trim():null;}
   return{nome_cliente:v('fn'),numero_venda:v('fv'),etiqueta_ml:v('fe'),codigo_produto:v('fc2')?v('fc2').toUpperCase():null,nome_produto:v('fp'),marca:v('fm'),quantidade:v('fq'),data_despacho:v('fd'),status:g('fs')?g('fs').value:'recebido',observacoes:v('fo'),galpao:v('fg')};}
@@ -519,12 +540,10 @@ window.exportData=function(){
   a.href=u;a.download='speedlog-'+today()+'.json';a.click();URL.revokeObjectURL(u);
 };
 
-// ── MODAL / TOAST ────────────────────────────────────────────────────────────
 function modal(html){var o=g('modal-overlay');if(o){o.classList.remove('hidden');o.innerHTML=html;}}
 window.closeModal=function(){var o=g('modal-overlay');if(o)o.classList.add('hidden');};
 function toast(msg,type){var c=g('toast-container');if(!c)return;var t=document.createElement('div');t.className='toast '+(type||'');t.textContent=msg;c.appendChild(t);setTimeout(function(){try{t.remove();}catch(e){}},3200);}
 
-// ── INIT ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded',function(){
   try{
     loadData();initFirebase();
