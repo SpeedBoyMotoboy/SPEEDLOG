@@ -1,4 +1,4 @@
-// SpeedLog v7 — Firebase + Galpão
+// SpeedLog v8 — OCR Pack ID
 var DATA_KEY = 'sl_data';
 var FB_KEY   = 'sl_fb';
 
@@ -31,10 +31,7 @@ function saveFbConfig(c){localStorage.setItem(FB_KEY,JSON.stringify(c));}
 // ── FIREBASE ────────────────────────────────────────────────────────────────
 function initFirebase(){
   var cfg = getFbConfig();
-  if(!cfg || !cfg.databaseURL){
-    fbDb = null;
-    return;
-  }
+  if(!cfg || !cfg.databaseURL){ fbDb = null; return; }
   try{
     if(!window.firebase){toast('Firebase SDK não carregou','err');return;}
     if(firebase.apps.length) firebase.apps[0].delete().catch(function(){});
@@ -159,7 +156,7 @@ function onCodeFound(code){
   if(matches.length===0){
     var campo='fc2';var tipoLabel='código de produto';
     if(/^(ML|BR)[A-Z0-9]{5,}$/i.test(codeT)){campo='fe';tipoLabel='etiqueta Mercado Livre';}
-    else if(/^\d{10,}$/.test(codeT)){campo='fv';tipoLabel='número de venda';}
+    else if(/^\d{10,}$/.test(codeT)){campo='fv';tipoLabel='número de venda / Pack ID';}
     PREFILL={campo:campo,valor:campo==='fc2'?codeU:codeT};
     var noPedidos=ST.pedidos.length===0;
     var msg=noPedidos
@@ -334,18 +331,53 @@ function orderCard(p){
   return '<a href="#/pedido/'+p.id+'" class="order-card '+(isAt?'atrasado':p.status)+'"><div class="oc-hdr"><span class="oc-ttl">'+esc(p.nome_cliente||'Cliente não informado')+'</span><span class="badge '+p.status+'">'+s.icon+' '+s.label+'</span></div><div class="oc-meta">'+meta+'</div></a>';
 }
 
-// ── BIPAR ────────────────────────────────────────────────────────────────────
+// ── BIPAR ─────────────────────────────────────────────────────────────────
 function pgBipar(main){
+  var hasOCR='TextDetector' in window;
   main.innerHTML='<div class="page"><div class="scan-area"><div id="reader"></div><div class="scan-laser"></div></div>'+
-    '<div class="scan-hint">📷 Bipe o código do produto para encontrar a etiqueta ML</div>'+
+    '<div class="scan-hint">📷 Bipe o código de barras — ou use OCR para Pack ID sem código de barras</div>'+
     '<div id="scan-status"></div><div id="scan-result"></div>'+
+    (hasOCR
+      ? '<button class="btn ocr-btn btn-bl" id="btn-ocr" onclick="window.captureOCR()">📸 Ler Pack ID da etiqueta (OCR)</button>'
+      : '<div style="background:#fffbeb;border-radius:var(--rs);padding:.75rem;font-size:.8rem;color:#856404">⚠️ OCR não disponível neste navegador (use Chrome). Digite o Pack ID abaixo.</div>'
+    )+
     '<div style="background:var(--card);border-radius:var(--r);padding:1rem;box-shadow:var(--sh)">'+
-    '<div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:.75rem">Ou digite o código manualmente</div>'+
-    '<div style="display:flex;gap:.5rem"><input class="fc" id="manual-code" type="text" placeholder="Ex: KTB759" style="flex:1;text-transform:uppercase">'+
+    '<div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:.75rem">Ou digite o código / Pack ID manualmente</div>'+
+    '<div style="display:flex;gap:.5rem"><input class="fc" id="manual-code" type="text" placeholder="Pack ID, KTB759, nº venda..." style="flex:1">'+
     '<button class="btn btn-p" onclick="window.manualCode()">Buscar</button></div></div></div>';
   setTimeout(startScanner,200);
 }
-window.manualCode=function(){var inp=g('manual-code');var code=inp?inp.value.trim().toUpperCase():'';if(!code){toast('Digite um código','err');return;}stopScanner();onCodeFound(code);};
+window.manualCode=function(){
+  var inp=g('manual-code');var code=inp?inp.value.trim():'';
+  if(!code){toast('Digite um código','err');return;}
+  stopScanner();onCodeFound(code);
+};
+window.captureOCR=async function(){
+  var video=document.querySelector('#reader video');
+  if(!video){toast('Câmera não iniciou — aguarde 2 segundos e tente novamente','err');return;}
+  var btn=g('btn-ocr');
+  if(btn){btn.textContent='⏳ Lendo texto...';btn.disabled=true;}
+  try{
+    var td=new TextDetector();
+    var results=await td.detect(video);
+    var all=results.map(function(r){return r.rawValue;}).join('\n');
+    // Tenta Pack ID primeiro, depois número longo (>= 10 dígitos)
+    var m=all.match(/Pack\s*ID[:\s]*(\d{8,})/i)
+        ||all.match(/\b(2\d{9,15})\b/)  // ML IDs começam com 2
+        ||all.match(/\b(\d{12,16})\b/);
+    if(m){
+      toast('Pack ID: '+m[1],'ok');
+      stopScanner();
+      onCodeFound(m[1]);
+    }else{
+      toast('Número não encontrado — centralize o Pack ID e tente novamente','warn');
+    }
+  }catch(e){
+    toast('OCR: '+e.message,'err');
+  }finally{
+    if(btn){btn.textContent='📸 Ler Pack ID da etiqueta (OCR)';btn.disabled=false;}
+  }
+};
 
 // ── ALERTAS ──────────────────────────────────────────────────────────────────
 function pgAlertas(main){
@@ -442,7 +474,12 @@ function pgConfig(main){
     '</div></div>'+
     '<div class="csec"><div class="csec-ttl">📜 Regras do Firebase (1x só)</div>'+
     '<p class="muted sm" style="margin-bottom:.5rem">No Firebase Console → Realtime Database → Regras:</p>'+
-    '<code style="background:#f8fafc;border:1px solid var(--border);border-radius:var(--rs);padding:.75rem;display:block;font-size:.75rem;white-space:pre">{\n  &quot;rules&quot;: {\n    &quot;.read&quot;: true,\n    &quot;.write&quot;: true\n  }\n}</code>'+
+    '<code style="background:#f8fafc;border:1px solid var(--border);border-radius:var(--rs);padding:.75rem;display:block;font-size:.75rem;white-space:pre">{
+  &quot;rules&quot;: {
+    &quot;.read&quot;: true,
+    &quot;.write&quot;: true
+  }
+}</code>'+
     '<p class="muted sm" style="margin-top:.5rem">Para mais segurança: restrinja o apiKey no Google Cloud Console para aceitar só de speedboymotoboy.github.io.</p>'+
     '</div>'+
     '<div class="csec"><div class="csec-ttl">📊 Dados ('+n+' pedido'+(n!==1?'s':'')+' em cache)</div>'+
