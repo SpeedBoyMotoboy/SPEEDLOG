@@ -40,9 +40,6 @@ function initFirebase(){
       else if(page==='nfs'&&main)renderNFList();
       else if(page==='etiquetas'&&main)renderListEtiquetas();
       else if(page==='estoque'&&main)renderEstoqueLista('');
-    },function(err){
-      var msg=err.message||'';
-      toast('Firebase: '+(msg.indexOf('ermission')>=0?'configure as Regras no Console':msg),'err');
     });
     fbDb.ref('estoque').on('value',function(snap){
       var raw=snap.val()||{};
