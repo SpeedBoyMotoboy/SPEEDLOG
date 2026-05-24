@@ -256,8 +256,6 @@ function renderHome(main){
   var ets=ST.registros.filter(function(r){return r.tipo==='etiqueta';});
   var c={recebido:0,separacao:0,expedicao:0,finalizado:0};
   ets.forEach(function(r){if(c[r.status]!==undefined)c[r.status]++;});
-  var cfg=getFbConfig();
-  var fbStatus=fbDb?'🟢 Firebase sincronizado':(cfg&&cfg.databaseURL?'🟡 Reconectando...':'🔴 Configure Firebase em Config');
   var pendentes=ets.filter(function(r){return r.status!=='finalizado';}).slice(0,5);
   var semEstoque=[];
   ST.estoque.forEach(function(item){var info=getEstoqueInfo(item.codigo);if(info.disponivel<=0&&info.total>0)semEstoque.push(item.nome||item.codigo);});
@@ -268,7 +266,6 @@ function renderHome(main){
   h+=sCard('s-sep','🔍',c.separacao,'Separação');
   h+=sCard('s-fin','✅',c.finalizado,'Despachados');
   h+='</div>';
-  h+='<div style="text-align:center;font-size:.72rem;color:var(--muted)">'+fbStatus+'</div>';
   if(semEstoque.length){
     h+='<div style="background:var(--red-bg);border-radius:var(--r);padding:.75rem;border-left:4px solid var(--red)">';
     h+='<div style="font-weight:700;color:var(--red);font-size:.85rem;margin-bottom:.25rem">🔴 Sem estoque</div>';
@@ -321,7 +318,7 @@ function renderNFList(){
   el.innerHTML=h+'</div>';
 }
 window.fGalNF=function(v){ST.fGalpao=v;pgNFs(g('app-main'));};
-window.confirmDelNF=function(id){modal('<div class="modal"><div class="modal-ttl">⚠️ Excluir NF?</div><div class="modal-txt">Essa ação não pode ser desfeita.</div><div class="modal-acts"><button class="btn btn-n" style="flex:1" onclick="window.closeModal()">Cancelar</button><button class="btn btn-d" style="flex:1" onclick="window.doDelNF(\''+id+'\')" >Excluir</button></div></div>');};
+window.confirmDelNF=function(id){modal('<div class="modal"><div class="modal-ttl">⚠️ Excluir NF?</div><div class="modal-txt">Essa ação não pode ser desfeita.</div><div class="modal-acts"><button class="btn btn-n" style="flex:1" onclick="window.closeModal()">Cancelar</button><button class="btn btn-d" style="flex:1" onclick="window.doDelNF(\''+id+'\')"  >Excluir</button></div></div>');}
 window.doDelNF=function(id){window.closeModal();deleteRegistro(id);toast('NF removida','ok');renderNFList();};
 
 function pgNovaNF(main){
@@ -453,7 +450,7 @@ function renderEstoqueLista(q){
 }
 function esqCard(lbl,num,cor){return '<div style="background:var(--bg);border-radius:var(--rs);padding:.5rem;text-align:center"><div style="font-size:1.4rem;font-weight:800;color:'+cor+'">'+num+'</div><div style="font-size:.63rem;color:var(--muted);font-weight:600;white-space:nowrap">'+lbl+'</div></div>';}
 window.doSearchEstq=function(v){renderEstoqueLista(v);};
-window.confirmDelEstq=function(id){modal('<div class="modal"><div class="modal-ttl">⚠️ Excluir do estoque?</div><div class="modal-txt">Não afeta etiquetas existentes.</div><div class="modal-acts"><button class="btn btn-n" style="flex:1" onclick="window.closeModal()">Cancelar</button><button class="btn btn-d" style="flex:1" onclick="window.doDelEstq(\''+id+'\')" >Excluir</button></div></div>');};
+window.confirmDelEstq=function(id){modal('<div class="modal"><div class="modal-ttl">⚠️ Excluir do estoque?</div><div class="modal-txt">Não afeta etiquetas existentes.</div><div class="modal-acts"><button class="btn btn-n" style="flex:1" onclick="window.closeModal()">Cancelar</button><button class="btn btn-d" style="flex:1" onclick="window.doDelEstq(\''+id+'\')"  >Excluir</button></div></div>');};
 window.doDelEstq=function(id){window.closeModal();ST.estoque=ST.estoque.filter(function(e){return e.id!==id;});saveEstoque();delEstoqueFB(id);toast('Removido','ok');renderEstoqueLista('');};
 
 function pgEntrada(main){
@@ -617,7 +614,7 @@ function pgEditar(main,id){
     buildFormFields(r)+
     '<div class="fg"><label class="fl">Cód. barras (etiqueta)</label><input class="fc" id="etiqueta-barcode" type="text" value="'+esc(r.etiqueta_barcode||'')+'"></div>'+
     '<div class="fg"><label class="fl">Galpão</label><div class="chips" id="galpao-chips">'+gcChips(r.galpao)+'</div><input type="hidden" id="fg" value="'+esc(r.galpao||'')+'"></div>'+
-    '<button class="btn btn-p btn-bl mt2" onclick="window.saveEditar(\''+id+'\')" >💾 Salvar Alterações</button>'+
+    '<button class="btn btn-p btn-bl mt2" onclick="window.saveEditar(\''+id+'\')"  >💾 Salvar Alterações</button>'+
     '</div></div>';
 }
 window.saveEditar=function(id){
@@ -648,7 +645,7 @@ function pgDetalhe(main,id){
   h+='</div>';
   if(r.observacoes)h+='<div class="df"><span class="dl">Observações</span><span class="dv">'+esc(r.observacoes)+'</span></div>';
   h+='</div>';
-  if(s.next){h+='<button class="act-btn '+s.next+'" onclick="window.advance(\''+r.id+'\',\''+s.next+'\')" ><div class="act-ico '+s.next+'">'+SM[s.next].icon+'</div><div style="flex:1"><div style="font-weight:800;font-size:.95rem">'+esc(s.nxt)+'</div><div style="font-size:.75rem;color:var(--muted);margin-top:2px">→ '+SM[s.next].label+'</div></div><svg style="opacity:.4" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg></button>';}
+  if(s.next){h+='<button class="act-btn '+s.next+'" onclick="window.advance(\''+r.id+'\',\''+s.next+'\')"  ><div class="act-ico '+s.next+'">'+SM[s.next].icon+'</div><div style="flex:1"><div style="font-weight:800;font-size:.95rem">'+esc(s.nxt)+'</div><div style="font-size:.75rem;color:var(--muted);margin-top:2px">→ '+SM[s.next].label+'</div></div><svg style="opacity:.4" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg></button>';}
   else{h+='<div style="background:var(--s-fin-bg);border-radius:var(--r);padding:1rem;text-align:center;color:#2e7d32;font-weight:700">✅ Pedido Despachado</div>';}
   main.innerHTML=h+'</div>';
 }
@@ -681,9 +678,9 @@ function onCodeFoundBipar(code){
     esqHtml='<div style="background:var(--bg);border-radius:var(--rs);padding:.75rem;margin:.75rem .75rem 0">';
     esqHtml+='<div style="font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:.4rem">📦 Estoque — '+esc(esqInfo.nome)+'</div>';
     esqHtml+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.4rem">';
-    esqHtml+=esqCard('Entrada',esqInfo.total,'var(--text)');
-    esqHtml+=esqCard('Reservado',esqInfo.reservado,'var(--orange)');
-    esqHtml+=esqCard('Disponível',esqInfo.disponivel,cor);
+    esqHtml+=esqMiniCard('Entrada',esqInfo.total,'var(--text)');
+    esqHtml+=esqMiniCard('Reservado',esqInfo.reservado,'var(--orange)');
+    esqHtml+=esqMiniCard('Disponível',esqInfo.disponivel,cor);
     esqHtml+='</div></div>';
   }
   if(!matches.length){
@@ -706,12 +703,12 @@ function onCodeFoundBipar(code){
     if(p.nome_produto)details+='<div class="scan-detail-row"><span class="dl">Produto</span><span class="dv">'+esc(p.nome_produto)+(p.marca?' — '+esc(p.marca):'')+'</span></div>';
     if(p.quantidade)details+='<div class="scan-detail-row"><span class="dl">Qtd</span><span class="dv">'+esc(p.quantidade)+'</span></div>';
     if(p.galpao&&GALPOES[p.galpao])details+='<div class="scan-detail-row"><span class="dl">Galpão</span><span class="dv bold">🏭 '+esc(GALPOES[p.galpao])+'</span></div>';
-    var ab=s.next?'<button class="btn btn-p btn-bl" style="margin-top:.75rem" onclick="window.advanceScan(\''+p.id+'\',\''+s.next+'\')" >'+SM[s.next].icon+' '+s.nxt+'</button>':'';
+    var ab=s.next?'<button class="btn btn-p btn-bl" style="margin-top:.75rem" onclick="window.advanceScan(\''+p.id+'\',\''+s.next+'\')"  >'+SM[s.next].icon+' '+s.nxt+'</button>':'';
     cards+='<div class="scan-match-card '+p.status+'"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem"><span class="badge '+p.status+'">'+s.icon+' '+s.label+'</span><a href="#/etiqueta/'+p.id+'" style="font-size:.78rem;color:var(--blue);font-weight:600">Ver detalhes →</a></div>'+details+ab+'</div>';
   });
   r.innerHTML='<div class="scan-result">'+topBar+esqHtml+'<div class="scan-matches">'+cards+'</div></div>';
 }
-function esqCard(lbl,num,cor){return '<div style="background:var(--card);border-radius:var(--rs);padding:.4rem;text-align:center"><div style="font-size:1.2rem;font-weight:800;color:'+cor+'">'+num+'</div><div style="font-size:.62rem;color:var(--muted);font-weight:600">'+lbl+'</div></div>';}
+function esqMiniCard(lbl,num,cor){return '<div style="background:var(--card);border-radius:var(--rs);padding:.4rem;text-align:center"><div style="font-size:1.2rem;font-weight:800;color:'+cor+'">'+num+'</div><div style="font-size:.62rem;color:var(--muted);font-weight:600">'+lbl+'</div></div>';}
 window.restartScan=function(){var r=g('scan-result');if(r)r.innerHTML='';startScanner(onCodeFoundBipar);};
 window.advanceScan=function(id,nxt){updateRegistro(id,{status:nxt});toast(SM[nxt].icon+' '+SM[nxt].label+' ✅','ok');var p=getRegistro(id);if(p)onCodeFoundBipar(p.etiqueta_barcode||p.codigo_produto||p.numero_venda||'');};
 
@@ -750,7 +747,7 @@ window.saveFbCfg=function(){
 };
 window.clearFbCfg=function(){localStorage.removeItem(FB_KEY);fbDb=null;toast('Configuração removida','ok');pgConfig(g('app-main'));};
 window.advance=function(id,nxt){updateRegistro(id,{status:nxt});toast(SM[nxt].icon+' '+SM[nxt].label,'ok');go();};
-window.confirmDel=function(id){modal('<div class="modal"><div class="modal-ttl">⚠️ Excluir etiqueta?</div><div class="modal-txt">Essa ação não pode ser desfeita.</div><div class="modal-acts"><button class="btn btn-n" style="flex:1" onclick="window.closeModal()">Cancelar</button><button class="btn btn-d" style="flex:1" onclick="window.doDel(\''+id+'\')" >Excluir</button></div></div>');};
+window.confirmDel=function(id){modal('<div class="modal"><div class="modal-ttl">⚠️ Excluir etiqueta?</div><div class="modal-txt">Essa ação não pode ser desfeita.</div><div class="modal-acts"><button class="btn btn-n" style="flex:1" onclick="window.closeModal()">Cancelar</button><button class="btn btn-d" style="flex:1" onclick="window.doDel(\''+id+'\')"  >Excluir</button></div></div>');};
 window.doDel=function(id){window.closeModal();deleteRegistro(id);toast('Excluído','ok');location.hash='#/etiquetas';};
 window.confirmClear=function(){modal('<div class="modal"><div class="modal-ttl">⚠️ Limpar cache local?</div><div class="modal-txt">Dados do Firebase permanecem.</div><div class="modal-acts"><button class="btn btn-n" style="flex:1" onclick="window.closeModal()">Cancelar</button><button class="btn btn-d" style="flex:1" onclick="window.doClear()">Limpar</button></div></div>');};
 window.doClear=function(){window.closeModal();ST.registros=[];ST.estoque=[];saveData();saveEstoque();toast('Cache limpo','ok');location.hash='#/';};
