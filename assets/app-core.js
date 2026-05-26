@@ -42,6 +42,9 @@ function initFirebase(){
 function attachFbListeners(){
   if(_fbListening||!fbDb)return;
   _fbListening=true;
+  // sobe o cache local antes de escutar, pra não perder registros bipados offline
+  ST.registros.forEach(function(r){if(r&&r.id)fbDb.ref('registros/'+r.id).update(r).catch(function(){});});
+  ST.estoque.forEach(function(e){if(e&&e.id)fbDb.ref('estoque/'+e.id).update(e).catch(function(){});});
   fbDb.ref('registros').on('value',function(snap){
     var raw=snap.val()||{};
     var arr=Object.values(raw).map(function(r){if(!r.tipo)r.tipo='etiqueta';return r;});
