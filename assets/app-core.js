@@ -1,6 +1,6 @@
-// SpeedLog v11 — core (dados, firebase, scanner, rota, shell)
+// SpeedLog v12 — core (dados, firebase, scanner, rota, shell)
 var DATA_KEY='sl_data';
-var FB_KEY='sl_fb';
+var FB_DEFAULT={apiKey:"AIzaSyDL8c28T9Q-IAK9JihzEXtT-OPiYOx24Jg",authDomain:"speedboy-3c1c6.firebaseapp.com",projectId:"speedboy-3c1c6",storageBucket:"speedboy-3c1c6.firebasestorage.app",messagingSenderId:"702743802978",appId:"1:702743802978:web:7b99217bebcc89f9bc8d3b",databaseURL:"https://speedboy-3c1c6-default-rtdb.firebaseio.com"};
 var SM={recebido:{label:'Recebido',icon:'📥',next:'separacao',nxt:'Iniciar Separação'},separacao:{label:'Separação',icon:'🔍',next:'expedicao',nxt:'Marcar Expedição'},expedicao:{label:'Expedição',icon:'📦',next:'finalizado',nxt:'Despachar ✅'},finalizado:{label:'Despachado',icon:'✅',next:null,nxt:null}};
 var SO=['recebido','separacao','expedicao','finalizado'];
 var GALPOES={real:'Real',comdip:'Comdip',bressan:'Bressan',sama:'Sama',pellegrino:'Pellegrino',eletropar:'Eletropar Nal.'};
@@ -19,45 +19,56 @@ function loadData(){
 function saveData(){try{localStorage.setItem(DATA_KEY,JSON.stringify(ST.registros));}catch(e){}}
 function loadEstoque(){try{ST.estoque=JSON.parse(localStorage.getItem('sl_estq')||'[]');}catch(e){ST.estoque=[];}}
 function saveEstoque(){try{localStorage.setItem('sl_estq',JSON.stringify(ST.estoque));}catch(e){}}
-function getFbConfig(){try{return JSON.parse(localStorage.getItem(FB_KEY)||'null');}catch(e){return null;}}
-function saveFbConfig(c){localStorage.setItem(FB_KEY,JSON.stringify(c));}
-
+var _fbListening=false;
 function initFirebase(){
-  var cfg=getFbConfig();
-  if(!cfg||!cfg.databaseURL){fbDb=null;return;}
+  if(!window.firebase){toast('Firebase SDK não carregou','err');return;}
   try{
-    if(!window.firebase){toast('Firebase SDK não carregou','err');return;}
     if(firebase.apps.length)firebase.apps[0].delete().catch(function(){});
-    firebase.initializeApp(cfg);
+    firebase.initializeApp(FB_DEFAULT);
     fbDb=firebase.database();
-    fbDb.ref('registros').on('value',function(snap){
-      var raw=snap.val()||{};
-      var arr=Object.values(raw).map(function(r){if(!r.tipo)r.tipo='etiqueta';return r;});
-      arr.sort(function(a,b){return (b.created_at||'').localeCompare(a.created_at||'');});
-      ST.registros=arr;saveData();
-      var page=routeParse().page;var main=g('app-main');
-      if(page==='home'&&main)renderHome(main);
-      else if(page==='nfs'&&main)renderNFList();
-      else if(page==='etiquetas'&&main)renderListEtiquetas();
-      else if(page==='estoque'&&main)renderEstoqueLista('');
-    });
-    fbDb.ref('estoque').on('value',function(snap){
-      var raw=snap.val()||{};
-      if(Object.keys(raw).length)ST.estoque=Object.values(raw);
-      saveEstoque();
-      if(routeParse().page==='estoque'){var m=g('app-main');if(m)renderEstoqueLista('');}
-    });
-    fbDb.ref('pedidos').once('value',function(snap){
-      var raw=snap.val()||{};
-      if(!Object.keys(raw).length)return;
-      Object.values(raw).forEach(function(r){
-        if(!r.tipo)r.tipo='etiqueta';
-        fbDb.ref('registros/'+r.id).set(r).catch(function(){});
+    if(firebase.auth){
+      try{firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL);}catch(e){}
+      firebase.auth().onAuthStateChanged(function(user){if(user)attachFbListeners();});
+      firebase.auth().signInAnonymously().catch(function(e){
+        fbDb=null;
+        toast('Firebase: ative o login Anônimo no console ('+(e.code||e.message)+')','err');
       });
-      fbDb.ref('pedidos').remove().catch(function(){});
-      toast('Dados migrados ✅','ok');
-    }).catch(function(){});
+    }else{
+      attachFbListeners();
+    }
   }catch(e){fbDb=null;toast('Erro Firebase: '+e.message,'err');}
+}
+
+function attachFbListeners(){
+  if(_fbListening||!fbDb)return;
+  _fbListening=true;
+  fbDb.ref('registros').on('value',function(snap){
+    var raw=snap.val()||{};
+    var arr=Object.values(raw).map(function(r){if(!r.tipo)r.tipo='etiqueta';return r;});
+    arr.sort(function(a,b){return (b.created_at||'').localeCompare(a.created_at||'');});
+    ST.registros=arr;saveData();
+    var page=routeParse().page;var main=g('app-main');
+    if(page==='home'&&main)renderHome(main);
+    else if(page==='nfs'&&main)renderNFList();
+    else if(page==='etiquetas'&&main)renderListEtiquetas();
+    else if(page==='estoque'&&main)renderEstoqueLista('');
+  });
+  fbDb.ref('estoque').on('value',function(snap){
+    var raw=snap.val()||{};
+    if(Object.keys(raw).length)ST.estoque=Object.values(raw);
+    saveEstoque();
+    if(routeParse().page==='estoque'){var m=g('app-main');if(m)renderEstoqueLista('');}
+  });
+  fbDb.ref('pedidos').once('value',function(snap){
+    var raw=snap.val()||{};
+    if(!Object.keys(raw).length)return;
+    Object.values(raw).forEach(function(r){
+      if(!r.tipo)r.tipo='etiqueta';
+      fbDb.ref('registros/'+r.id).set(r).catch(function(){});
+    });
+    fbDb.ref('pedidos').remove().catch(function(){});
+    toast('Dados migrados ✅','ok');
+  }).catch(function(){});
 }
 
 function pushFB(r){if(!fbDb)return;fbDb.ref('registros/'+r.id).set(r).catch(function(){});}
