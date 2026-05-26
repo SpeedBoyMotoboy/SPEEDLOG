@@ -1,4 +1,4 @@
-// SpeedLog v11 — UI (telas e handlers)
+// SpeedLog v12 — UI (telas e handlers)
 function gcChips(selected){
   var h='';
   Object.keys(GALPOES).forEach(function(k){h+='<span class="chip'+(selected===k?' on':'')+' galpao-chip" onclick="window.pickGalpao(\''+k+'\')" data-gv="'+k+'">'+GALPOES[k]+'</span>';});
@@ -38,7 +38,7 @@ function renderHome(main){
   if(ST.registros.length===0&&ST.estoque.length===0){
     h+='<div style="background:var(--blue);border-radius:var(--r);padding:1.25rem;color:#fff;text-align:center">';
     h+='<div style="font-size:1.8rem;margin-bottom:.5rem">🚚</div>';
-    h+='<p style="font-size:.9rem;opacity:.9;margin-bottom:.75rem"><strong>Como começar:</strong><br>1. Configure Firebase em ⚙️ Config<br>2. Estoque: registre entradas de produtos<br>3. NFs: bipe as notas nos galpões<br>4. Etiquetas: cole WhatsApp e bipe</p>';
+    h+='<p style="font-size:.9rem;opacity:.9;margin-bottom:.75rem"><strong>Como começar:</strong><br>1. Estoque: registre entradas de produtos<br>2. NFs: bipe as notas nos galpões<br>3. Etiquetas: cole WhatsApp e bipe<br><br>A sincronização é automática entre os aparelhos.</p>';
     h+='<div style="display:flex;gap:.75rem;flex-direction:column">';
     h+='<a href="#/entrada" class="btn btn-o btn-bl">📦 Registrar Entrada</a>';
     h+='<a href="#/nova-nf" class="btn btn-bl" style="background:rgba(255,255,255,.2);color:#fff">📋 Registrar NF</a>';
@@ -469,19 +469,12 @@ window.advanceScan=function(id,nxt){updateRegistro(id,{status:nxt});toast(SM[nxt
 
 function pgConfig(main){
   var n=ST.registros.length;
-  var cfg=getFbConfig()||{};
-  var fbStatus=fbDb?'<span style="color:var(--s-fin)">🟢 Conectado</span>':'<span style="color:var(--red)">🔴 Não conectado</span>';
-  var projectHint=cfg.projectId?'<p class="muted sm">Projeto: <strong>'+esc(cfg.projectId)+'</strong></p>':'';
+  var fbStatus=fbDb?'<span style="color:var(--s-fin)">🟢 Conectado e sincronizando</span>':'<span style="color:var(--red)">🔴 Conectando...</span>';
   main.innerHTML='<div class="page">'+
-    '<div class="csec"><div class="csec-ttl">🔥 Firebase Realtime Database</div>'+
-    '<div style="padding:.4rem 0">'+fbStatus+'</div>'+projectHint+
-    '<p class="muted sm" style="margin-top:.5rem;margin-bottom:.75rem">Cole o JSON do Firebase (console.firebase.google.com → Configurações → Seus apps → SDK):</p>'+
-    '<textarea class="fc" id="fb-json" rows="9" placeholder="{\n  &quot;apiKey&quot;: &quot;AIza...&quot;,\n  &quot;databaseURL&quot;: &quot;https://...firebaseio.com&quot;,\n  &quot;projectId&quot;: &quot;...&quot;\n}">'+esc(cfg.projectId?JSON.stringify(cfg,null,2):'')+'</textarea>'+
-    '<div style="display:flex;gap:.75rem;margin-top:.75rem">'+
-    '<button class="btn btn-p" onclick="window.saveFbCfg()" style="flex:1">💾 Salvar e Conectar</button>'+
-    '<button class="btn btn-n" onclick="window.clearFbCfg()">🗑️ Limpar</button>'+
-    '</div><div id="fb-status" class="mt sm"></div>'+
-    '<div style="background:#e8f5e9;border-radius:var(--rs);padding:.75rem;margin-top:.75rem;font-size:.8rem;color:#2e7d32"><strong>ℹ️</strong> O JSON fica só no seu celular (localStorage).</div>'+
+    '<div class="csec"><div class="csec-ttl">🔥 Sincronização (Firebase)</div>'+
+    '<div style="padding:.4rem 0">'+fbStatus+'</div>'+
+    '<p class="muted sm">Projeto: <strong>'+esc(FB_DEFAULT.projectId)+'</strong></p>'+
+    '<div style="background:#e8f5e9;border-radius:var(--rs);padding:.75rem;margin-top:.75rem;font-size:.8rem;color:#2e7d32"><strong>ℹ️</strong> A sincronização é automática. Todos os aparelhos compartilham os mesmos dados em tempo real — não precisa configurar nada.</div>'+
     '</div>'+
     '<div class="csec"><div class="csec-ttl">📊 Dados ('+n+' registro'+(n!==1?'s':'')+' em cache)</div>'+
     '<div style="display:flex;gap:.75rem">'+
@@ -489,18 +482,6 @@ function pgConfig(main){
     '<button class="btn btn-d" style="flex:1" onclick="window.confirmClear()">🗑️ Limpar cache</button>'+
     '</div></div></div>';
 }
-window.saveFbCfg=function(){
-  var el=g('fb-json');var txt=el?el.value.trim():'';
-  if(!txt){toast('Cole o JSON do Firebase','err');return;}
-  try{
-    var cfg=JSON.parse(txt);
-    if(!cfg.databaseURL){toast('JSON precisa ter databaseURL','err');return;}
-    saveFbConfig(cfg);initFirebase();
-    var st=g('fb-status');if(st)st.innerHTML='<span style="color:var(--muted)">Conectando...</span>';
-    setTimeout(function(){var st2=g('fb-status');if(st2)st2.innerHTML=fbDb?'<span style="color:var(--s-fin)">✅ Conectado!</span>':'<span style="color:var(--red)">❌ Verifique as Regras do Firebase</span>';},2000);
-  }catch(e){toast('JSON inválido: '+e.message,'err');}
-};
-window.clearFbCfg=function(){localStorage.removeItem(FB_KEY);fbDb=null;toast('Configuração removida','ok');pgConfig(g('app-main'));};
 window.advance=function(id,nxt){updateRegistro(id,{status:nxt});toast(SM[nxt].icon+' '+SM[nxt].label,'ok');go();};
 window.confirmDel=function(id){modal('<div class="modal"><div class="modal-ttl">⚠️ Excluir etiqueta?</div><div class="modal-txt">Essa ação não pode ser desfeita.</div><div class="modal-acts"><button class="btn btn-n" style="flex:1" onclick="window.closeModal()">Cancelar</button><button class="btn btn-d" style="flex:1" onclick="window.doDel(\''+id+'\')">Excluir</button></div></div>');};
 window.doDel=function(id){window.closeModal();deleteRegistro(id);toast('Excluído','ok');location.hash='#/etiquetas';};
