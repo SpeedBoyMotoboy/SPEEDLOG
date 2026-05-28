@@ -9,9 +9,9 @@ function renderHome(main){
   var hoje=today();
   var nfsHoje=ST.registros.filter(function(r){return r.tipo==='nf'&&(r.created_at||'').slice(0,10)===hoje;}).length;
   var ets=ST.registros.filter(function(r){return r.tipo==='etiqueta';});
-  var c={recebido:0,separacao:0,expedicao:0,finalizado:0};
+  var c={recebido:0,separacao:0,expedicao:0,finalizado:0,revisao:0};
   ets.forEach(function(r){if(c[r.status]!==undefined)c[r.status]++;});
-  var pendentes=ets.filter(function(r){return r.status!=='finalizado';}).slice(0,5);
+  var pendentes=ets.filter(function(r){return r.status!=='finalizado'&&r.status!=='revisao';}).slice(0,5);
   var semEstoque=[];
   ST.estoque.forEach(function(item){var info=getEstoqueInfo(item.codigo);if(info.disponivel<=0&&info.total>0)semEstoque.push(item.nome||item.codigo);});
   var h='<div class="page">';
@@ -21,6 +21,12 @@ function renderHome(main){
   h+=sCard('s-sep','🔍',c.separacao,'Separação');
   h+=sCard('s-fin','✅',c.finalizado,'Despachados');
   h+='</div>';
+  if(c.revisao){
+    h+='<a href="#/revisao" style="display:block;text-decoration:none;background:#fff3cd;border-radius:var(--r);padding:.75rem;border-left:4px solid var(--orange);color:var(--text)">';
+    h+='<div style="font-weight:700;color:#856404;font-size:.85rem;margin-bottom:.25rem">⚠️ '+c.revisao+' etiqueta'+(c.revisao>1?'s':'')+' do WhatsApp aguardando revisão</div>';
+    h+='<div style="font-size:.78rem;color:var(--muted)">Não consegui identificar todos os campos — toque para revisar →</div>';
+    h+='</a>';
+  }
   if(semEstoque.length){
     h+='<div style="background:var(--red-bg);border-radius:var(--r);padding:.75rem;border-left:4px solid var(--red)">';
     h+='<div style="font-weight:700;color:var(--red);font-size:.85rem;margin-bottom:.25rem">🔴 Sem estoque</div>';
@@ -129,7 +135,9 @@ window.salvarNF=function(){
 };
 
 function pgEtiquetas(main){
+  var revQtd=ST.registros.filter(function(r){return r.tipo==='etiqueta'&&r.status==='revisao';}).length;
   var chips='<span class="chip'+(!ST.fStatus?' on':'')+'" onclick="window.fSt(null)">Todas</span>';
+  if(revQtd||ST.fStatus==='revisao'){chips+='<span class="chip revisao'+(ST.fStatus==='revisao'?' on revisao':'')+'" onclick="window.fSt(\'revisao\')">⚠️ Revisão'+(revQtd?' ('+revQtd+')':'')+'</span>';}
   SO.forEach(function(s){chips+='<span class="chip'+(ST.fStatus===s?' on '+s:'')+'" onclick="window.fSt(\''+s+'\')">'+SM[s].icon+' '+SM[s].label+'</span>';});
   var gchips='<span class="chip'+(!ST.fGalpao?' on':'')+'" onclick="window.fGal(null)">Todos</span>';
   Object.keys(GALPOES).forEach(function(k){gchips+='<span class="chip'+(ST.fGalpao===k?' on':'')+'" onclick="window.fGal(\''+k+'\')">'+GALPOES[k]+'</span>';});
@@ -156,6 +164,13 @@ function etiquetaCard(r){
   var s=SM[r.status]||SM.recebido;
   var dt=r.created_at?new Date(r.created_at).toLocaleDateString('pt-BR'):'';
   var meta='';
+  if(r.origem==='whatsapp')meta+='<span class="meta">📱 WhatsApp</span>';
+  if(r.pdf_url)meta+='<span class="meta">📎 PDF</span>';
+  if(r.status==='revisao'&&Array.isArray(r.parse_faltando)&&r.parse_faltando.length){
+    var labels={nome_cliente:'cliente',numero_venda:'venda',nome_produto:'produto',codigo_produto:'SKU',marca:'marca',quantidade:'qtd'};
+    var faltStr=r.parse_faltando.map(function(k){return labels[k]||k;}).join(', ');
+    meta+='<span class="meta danger">⚠️ Faltando: '+esc(faltStr)+'</span>';
+  }
   if(r.numero_venda)meta+='<span class="meta">🏷 <strong>'+esc(r.numero_venda)+'</strong></span>';
   if(r.codigo_produto){
     var info=getEstoqueInfo(r.codigo_produto);
@@ -308,7 +323,8 @@ function pgNovo(main){
 }
 function buildFormFields(r){
   if(!r)r={};
-  var opts=SO.map(function(s){return '<option value="'+s+'"'+(r.status===s?' selected':'')+'>'+SM[s].label+'</option>';}).join('');
+  var statusList=r.status==='revisao'?['revisao'].concat(SO):SO;
+  var opts=statusList.map(function(s){return '<option value="'+s+'"'+(r.status===s?' selected':'')+'>'+SM[s].label+'</option>';}).join('');
   return '<div class="fg"><label class="fl">Cliente *</label><input class="fc" id="fn" type="text" placeholder="Nome do cliente" value="'+esc(r.nome_cliente||'')+'"></div>'+
     '<div class="g2"><div class="fg"><label class="fl">Nº Venda</label><input class="fc" id="fv" type="text" placeholder="2000016511..." value="'+esc(r.numero_venda||'')+'"></div>'+
     '<div class="fg"><label class="fl">SKU / Cód.</label><input class="fc" id="fc2" type="text" style="text-transform:uppercase" placeholder="BI0021MM" value="'+esc(r.codigo_produto||'')+'"></div></div>'+
@@ -384,6 +400,9 @@ function pgDetalhe(main,id){
   if(!r||r.tipo!=='etiqueta'){main.innerHTML='<div class="page"><div class="empty"><span class="empty-ico">❌</span><h3>Não encontrado</h3></div></div>';return;}
   var s=SM[r.status]||SM.recebido;var ci=SO.indexOf(r.status);
   var h='<div class="page">';
+  if(r.status==='revisao'){
+    h+='<div style="background:#fff3cd;border-radius:var(--r);padding:.75rem;border-left:4px solid var(--orange);margin-bottom:.75rem"><div style="font-weight:700;color:#856404;font-size:.85rem">⚠️ Aguardando revisão</div><div style="font-size:.78rem;color:var(--muted);margin-top:.25rem">Importada do WhatsApp com campos faltantes. Edite, complete e aprove.</div></div>';
+  }
   h+='<div class="sprog">';
   SO.forEach(function(st,i){var cl=i<ci?'done':(i===ci?'active':'');h+='<div class="pstep '+cl+'"><div class="pdot">'+(i<ci?'✓':String(i+1))+'</div><span class="plbl">'+SM[st].label+'</span></div>';});
   h+='</div>';
@@ -400,6 +419,12 @@ function pgDetalhe(main,id){
   h+='</div>';
   if(r.observacoes)h+='<div class="df"><span class="dl">Observações</span><span class="dv">'+esc(r.observacoes)+'</span></div>';
   h+='</div>';
+  if(r.pdf_url){
+    h+='<a href="'+esc(r.pdf_url)+'" target="_blank" rel="noopener" class="btn btn-n btn-bl" style="margin-top:.75rem">📎 Baixar PDF'+(r.pdf_nome?' — '+esc(r.pdf_nome):'')+'</a>';
+  }
+  if(r.texto_original){
+    h+='<details class="dcard" style="margin-top:.75rem"><summary style="cursor:pointer;font-weight:700;font-size:.85rem;color:var(--muted)">📱 Mensagem original do WhatsApp</summary><pre style="white-space:pre-wrap;font-family:inherit;font-size:.82rem;margin-top:.5rem;color:var(--text)">'+esc(r.texto_original)+'</pre></details>';
+  }
   if(s.next){h+='<button class="act-btn '+s.next+'" onclick="window.advance(\''+r.id+'\',\''+s.next+'\')"><div class="act-ico '+s.next+'">'+SM[s.next].icon+'</div><div style="flex:1"><div style="font-weight:800;font-size:.95rem">'+esc(s.nxt)+'</div><div style="font-size:.75rem;color:var(--muted);margin-top:2px">→ '+SM[s.next].label+'</div></div><svg style="opacity:.4" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg></button>';}
   else{h+='<div style="background:var(--s-fin-bg);border-radius:var(--r);padding:1rem;text-align:center;color:#2e7d32;font-weight:700">✅ Pedido Despachado</div>';}
   main.innerHTML=h+'</div>';

@@ -1,7 +1,7 @@
 // SpeedLog v12 — core (dados, firebase, scanner, rota, shell)
 var DATA_KEY='sl_data';
 var FB_DEFAULT={apiKey:"AIzaSyDL8c28T9Q-IAK9JihzEXtT-OPiYOx24Jg",authDomain:"speedboy-3c1c6.firebaseapp.com",projectId:"speedboy-3c1c6",storageBucket:"speedboy-3c1c6.firebasestorage.app",messagingSenderId:"702743802978",appId:"1:702743802978:web:7b99217bebcc89f9bc8d3b",databaseURL:"https://speedboy-3c1c6-default-rtdb.firebaseio.com"};
-var SM={recebido:{label:'Recebido',icon:'📥',next:'separacao',nxt:'Iniciar Separação'},separacao:{label:'Separação',icon:'🔍',next:'expedicao',nxt:'Marcar Expedição'},expedicao:{label:'Expedição',icon:'📦',next:'finalizado',nxt:'Despachar ✅'},finalizado:{label:'Despachado',icon:'✅',next:null,nxt:null}};
+var SM={revisao:{label:'Revisão',icon:'⚠️',next:'recebido',nxt:'Aprovar (Recebido)'},recebido:{label:'Recebido',icon:'📥',next:'separacao',nxt:'Iniciar Separação'},separacao:{label:'Separação',icon:'🔍',next:'expedicao',nxt:'Marcar Expedição'},expedicao:{label:'Expedição',icon:'📦',next:'finalizado',nxt:'Despachar ✅'},finalizado:{label:'Despachado',icon:'✅',next:null,nxt:null}};
 var SO=['recebido','separacao','expedicao','finalizado'];
 var GALPOES={real:'Real',comdip:'Comdip',bressan:'Bressan',sama:'Sama',pellegrino:'Pellegrino',eletropar:'Eletropar Nal.'};
 var ST={registros:[],estoque:[],fStatus:null,fGalpao:null,fSearch:''};
@@ -54,6 +54,7 @@ function attachFbListeners(){
     if(page==='home'&&main)renderHome(main);
     else if(page==='nfs'&&main)renderNFList();
     else if(page==='etiquetas'&&main)renderListEtiquetas();
+    else if(page==='revisao'&&main)renderListEtiquetas();
     else if(page==='estoque'&&main)renderEstoqueLista('');
   });
   fbDb.ref('estoque').on('value',function(snap){
@@ -174,6 +175,7 @@ function routeParse(){
   if(p[0]==='nfs')return{page:'nfs',id:null};
   if(p[0]==='nova-nf')return{page:'nova-nf',id:null};
   if(p[0]==='etiquetas')return{page:'etiquetas',id:null};
+  if(p[0]==='revisao')return{page:'revisao',id:null};
   if(p[0]==='novo')return{page:'novo',id:null};
   if(p[0]==='editar'&&p[1])return{page:'editar',id:p[1]};
   if(p[0]==='etiqueta'&&p[1])return{page:'detalhe',id:p[1]};
@@ -196,7 +198,7 @@ function go(){
   if(!main)return;
   document.querySelectorAll('.nav-item').forEach(function(el){
     var dp=el.dataset.page;
-    el.classList.toggle('active',dp===page||(page==='nova-nf'&&dp==='nfs')||(page==='novo'&&dp==='etiquetas')||(page==='editar'&&dp==='etiquetas')||(page==='detalhe'&&dp==='etiquetas')||(page==='entrada'&&dp==='estoque'));
+    el.classList.toggle('active',dp===page||(page==='nova-nf'&&dp==='nfs')||(page==='novo'&&dp==='etiquetas')||(page==='editar'&&dp==='etiquetas')||(page==='detalhe'&&dp==='etiquetas')||(page==='revisao'&&dp==='etiquetas')||(page==='entrada'&&dp==='estoque'));
   });
   if(acts)acts.innerHTML='';
   if(back){back.classList.add('hidden');back.onclick=null;}
@@ -220,6 +222,11 @@ function go(){
     else if(page==='etiquetas'){
       if(ttl)ttl.textContent='Etiquetas';
       if(acts)acts.innerHTML='<a href="#/novo" class="btn-icon" title="Nova Etiqueta">'+PLUS_SVG+'</a>';
+      pgEtiquetas(main);
+    }
+    else if(page==='revisao'){
+      if(ttl)ttl.textContent='Revisão';
+      ST.fStatus='revisao';
       pgEtiquetas(main);
     }
     else if(page==='novo'){

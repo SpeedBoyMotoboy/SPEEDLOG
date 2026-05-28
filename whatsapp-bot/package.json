@@ -1,0 +1,19 @@
+{
+  "name": "speedlog-whatsapp-bot",
+  "version": "1.0.0",
+  "description": "Lê mensagens do grupo de etiquetas no WhatsApp e cria registros no Firebase do SpeedLog.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "list-groups": "node index.js --list-groups"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.8",
+    "firebase-admin": "^12.1.0",
+    "pino": "^9.1.0",
+    "qrcode-terminal": "^0.12.0"
+  }
+}

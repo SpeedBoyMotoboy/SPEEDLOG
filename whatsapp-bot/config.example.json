@@ -1,0 +1,9 @@
+{
+  "GROUP_JID": "",
+  "FIREBASE_SERVICE_ACCOUNT_PATH": "./service-account.json",
+  "FIREBASE_DATABASE_URL": "https://speedboy-3c1c6-default-rtdb.firebaseio.com",
+  "FIREBASE_STORAGE_BUCKET": "speedboy-3c1c6.firebasestorage.app",
+  "GALPAO_PADRAO": null,
+  "AUTH_DIR": "./auth_info",
+  "PDF_SIGNED_URL_YEARS": 10
+}
