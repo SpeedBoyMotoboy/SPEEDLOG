@@ -26,7 +26,16 @@ function initFirebase(){
     if(firebase.apps.length)firebase.apps[0].delete().catch(function(){});
     firebase.initializeApp(FB_DEFAULT);
     fbDb=firebase.database();
-    attachFbListeners();
+    if(firebase.auth){
+      try{firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL);}catch(e){}
+      firebase.auth().onAuthStateChanged(function(user){if(user)attachFbListeners();});
+      firebase.auth().signInAnonymously().catch(function(e){
+        fbDb=null;
+        toast('Firebase: ative o login Anônimo no console ('+(e.code||e.message)+')','err');
+      });
+    }else{
+      attachFbListeners();
+    }
   }catch(e){fbDb=null;toast('Erro Firebase: '+e.message,'err');}
 }
 
